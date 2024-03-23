@@ -2,7 +2,8 @@
 #[cfg(test)]
 mod tests {
     mod valid_json_tests {
-        use super::*;
+        use crate::parse_stream;
+        use serde_json::json;
 
         #[test]
         fn test_single_key_value_pair() {
@@ -15,7 +16,8 @@ mod tests {
     }
 
     mod partial_json_tests {
-        use super::*;
+        use crate::parse_stream;
+        use serde_json::json;
 
         #[test]
         fn test_without_closing_brace() {
