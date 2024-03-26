@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 
 mod tests;
 
+#[derive(Copy, Clone)]
 enum ObjectStatus {
     // We are ready to start a new object.
     Ready,
@@ -10,20 +11,20 @@ enum ObjectStatus {
     StartObject,
     // We are in the beginning of a key, likely because we just received a quote. We need to store the keySoFar because
     // unlike the value, we cannot add the key to the object until it is complete.
-    KeyQuoteOpen {
-        keySoFar: String,
-    },
+    // KeyQuoteOpen {
+    //     keySoFar: String,
+    // },
     // We just finished a key, likely because we just received a closing quote.
-    KeyQuoteClose {
-        key: String,
-    },
+    // KeyQuoteClose {
+    //     key: String,
+    // },
     // We just finished a key, likely because we just received a colon.
-    Colon {
-        key: String
-    },
+    // Colon {
+    //     key: String
+    // },
     // We are in the beginning of a value, likely because we just received a quote.
     ValueQuoteOpen {
-        key: String,
+        // key: String,
         // We don't need to store the valueSoFar because we can add the value to the object immediately.
     },
     // We just finished a value, likely because we just received a closing quote.
@@ -40,9 +41,15 @@ fn parse_stream(_json_string: &str) -> Result<Value, String> {
 // to the current position in the object that we are in and returns the object with that character added along with
 // the new address.
 fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectStatus, current_char: char) -> Result<(), String> {
-    if object.is_none() && current_char == '{' {
-        *object = Some(json!({}));
-        *current_status = ObjectStatus::StartObject;
+    match (*current_status, current_char) {
+        (ObjectStatus::Ready, '{') => {
+            *object = Some(json!({}));
+            *current_status = ObjectStatus::StartObject;
+        },
+        // implement the rest of the cases
+        _ => {
+            return Err(format!("Invalid character {}", current_char));
+        }
     }
 
     Ok(())
