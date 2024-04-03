@@ -9,31 +9,45 @@ enum ObjectStatus {
     Ready,
     // We just started the object, likely because we just received an opening brace or a comma in case of an existing object.
     StartObject,
-    // We are in the beginning of a key, likely because we just received a quote. We need to store the keySoFar because
+    // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
     // unlike the value, we cannot add the key to the object until it is complete.
     KeyQuoteOpen {
-        KeySoFar: [char; 50],
+        key_so_far: Vec<char>,
     },
     // We just finished a key, likely because we just received a closing quote.
     KeyQuoteClose {
-        Key: [char; 50],
+        key: Vec<char>,
     },
     // We just finished a key, likely because we just received a colon.
     Colon {
-        Key: [char; 50]
+        key: Vec<char>
     },
     // We are in the beginning of a value, likely because we just received a quote.
     ValueQuoteOpen {
-        Key: [char; 50],
+        key: Vec<char>,
         // We don't need to store the valueSoFar because we can add the value to the object immediately.
     },
     // We just finished a value, likely because we just received a closing quote.
-    ValueQuoteClose,
+    Closed,
 }
 
-fn parse_stream(_json_string: &str) -> Result<Value, String> { 
+fn parse_stream(json_string: &str) -> Result<Value, String> { 
     // TODO: reverse the string and feed the characters to the add_char_into_object
-    let out = json!({}) ; 
+    let out: Value = json_string.chars().fold(None, |object, current_char| {
+        match object {
+            None => {
+                let mut object = None;
+                let mut current_status = ObjectStatus::Ready;
+                if let Err(e) = add_char_into_object(&mut object, &mut current_status, current_char) {
+                    eprintln!("error: {}", e);
+                }
+                object
+            },
+            Some(_) => {
+                object
+            }
+        }
+    }).unwrap();
     return Ok(out);
 }
 
@@ -46,7 +60,42 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
             *object = Some(json!({}));
             *current_status = ObjectStatus::StartObject;
         },
-        // implement the rest of the cases
+        (Some(Value::Object(_obj)), ObjectStatus::StartObject, '"') => {
+            *current_status = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
+        },
+        (Some(Value::Object(_obj)), ObjectStatus::KeyQuoteOpen { key_so_far }, '"') => {
+            *current_status = ObjectStatus::KeyQuoteClose { key: key_so_far };
+        },
+        (Some(Value::Object(mut obj)), ObjectStatus::KeyQuoteOpen { mut key_so_far }, char) => {
+            key_so_far.push(char);
+            obj.insert(key_so_far.iter().collect::<String>(), json!(null));
+        },
+        (Some(Value::Object(_obj)), ObjectStatus::KeyQuoteClose{ key }, ':') => {
+            *current_status = ObjectStatus::Colon { key };
+        },
+        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '"') => {
+            *current_status = ObjectStatus::ValueQuoteOpen { key: key.clone() };
+            // create an empty string for the value
+            obj.insert(key.iter().collect::<String>().clone(), json!(""));
+        },
+        (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteOpen { key: _key }, '"') => {
+            *current_status = ObjectStatus::Ready;
+        },
+        (Some(Value::Object(mut obj)), ObjectStatus::ValueQuoteOpen { key }, char) => {
+            let key_string = key.iter().collect::<String>();
+            let value = obj.get_mut(&key_string).unwrap();
+            match value {
+                Value::String(value) => {
+                    value.push(char);
+                },
+                _ => {
+                    return Err(format!("Invalid value type for key {}", key_string));
+                }
+            }
+        },
+        (Some(Value::Object(_obj)), ObjectStatus::Ready, '}') => {
+            *current_status = ObjectStatus::Closed;
+        },
         _ => {
             return Err(format!("Invalid character {}", current_char));
         }
