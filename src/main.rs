@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 
 mod tests;
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug)]
 enum ObjectStatus {
     // We are ready to start a new object.
     Ready,
@@ -41,7 +41,7 @@ fn parse_stream(_json_string: &str) -> Result<Value, String> {
 // to the current position in the object that we are in and returns the object with that character added along with
 // the new address.
 fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectStatus, current_char: char) -> Result<(), String> {
-    match (object.take(), *current_status, current_char) {
+    match (object.take(), current_status.clone(), current_char) {
         (None, ObjectStatus::Ready, '{') => {
             *object = Some(json!({}));
             *current_status = ObjectStatus::StartObject;
