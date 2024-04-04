@@ -83,5 +83,59 @@ mod tests {
         }
     
     }
+
+    mod object_two_properties {
+        mod valid_json_tests {
+            use crate::parse_stream;
+            use serde_json::json;
+    
+            #[test]
+            fn test_two_key_value_pairs() {
+                let raw_json = r#"{"key1": "value1", "key2": "value2"}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"key1": "value1", "key2": "value2"}));
+            }
+    
+            #[test]
+            fn test_two_key_value_pairs_with_number() {
+                let raw_json = r#"{"age": 1234567890, "height": 180}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": 1234567890, "height": 180}));
+            }
+        }
+    
+        mod partial_json_tests {
+            use crate::parse_stream;
+            use serde_json::json;
+    
+            #[test]
+            fn test_without_closing_brace_for_value() {
+                let raw_json = r#"{"key1": "value1", "key2": "value2""#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), (json!({"key1": "value1", "key2": "value2"})));
+            }
+    
+            #[test]
+            fn test_without_closing_quote_for_value() {
+                let raw_json = r#"{"key1": "value1", "key2": "value2"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), (json!({"key1": "value1", "key2": "value2"})));
+            }
+    
+            #[test]
+            fn test_with_opening_quote_without_text_for_value() {
+                let raw_json = r#"{"key1": "value1", "key2": ""#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), (json!({"key1": "value1", "key2": ""})));
+            }
+    
+            #[test]
+            fn test_without_value() {
+                let raw_json = r#"{"key1": "value1", "key2": "#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), (json!({"key1": "value1", "key2": null})));
+            }
+        }
+    }
 }
 

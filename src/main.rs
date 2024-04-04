@@ -7,8 +7,8 @@ mod tests;
 enum ObjectStatus {
     // We are ready to start a new object.
     Ready,
-    // We just started the object, likely because we just received an opening brace or a comma in case of an existing object.
-    StartObject,
+    // We just started a property, likely because we just received an opening brace or a comma in case of an existing object.
+    StartProperty,
     // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
     // unlike the value, we cannot add the key to the object until it is complete.
     KeyQuoteOpen {
@@ -27,7 +27,8 @@ enum ObjectStatus {
         key: Vec<char>,
         // We don't need to store the valueSoFar because we can add the value to the object immediately.
     },
-    // We just finished a value, likely because we just received a closing quote.
+    ValueQuoteClose,
+    // We just finished the object, likely because we just received a closing brace.
     Closed,
     // We are taking number value
     ValueNumber {
@@ -54,12 +55,12 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
     match (object.clone(), current_status.clone(), current_char) {
         (None, ObjectStatus::Ready, '{') => {
             *object = Some(json!({}));
-            *current_status = ObjectStatus::StartObject;
+            *current_status = ObjectStatus::StartProperty;
         },
         (_, _, ' ') => {
             // ignore whitespace
         },
-        (Some(Value::Object(_obj)), ObjectStatus::StartObject, '"') => {
+        (Some(Value::Object(_obj)), ObjectStatus::StartProperty, '"') => {
             *current_status = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
         },
         (Some(Value::Object(mut obj)), ObjectStatus::KeyQuoteOpen { key_so_far }, '"') => {
@@ -83,7 +84,7 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
         },
         // ------ Add String Value ------
         (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteOpen { key: _key }, '"') => {
-            *current_status = ObjectStatus::Ready;
+            *current_status = ObjectStatus::ValueQuoteClose;
         },
         (Some(Value::Object(mut obj)), ObjectStatus::ValueQuoteOpen { key }, char) => {
             let key_string = key.iter().collect::<String>();
@@ -118,7 +119,12 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
             }
             *object = Some(Value::Object(obj));
         },
-        (Some(Value::Object(_obj)), ObjectStatus::Ready | ObjectStatus::ValueNumber { .. }, '}') => {
+
+        // ------ Finished taking value ------
+        (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteClose | ObjectStatus::ValueNumber { .. }, ',') => {
+            *current_status = ObjectStatus::StartProperty;
+        },
+        (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteClose | ObjectStatus::ValueNumber { .. }, '}') => {
             *current_status = ObjectStatus::Closed;
         },
         _ => {
