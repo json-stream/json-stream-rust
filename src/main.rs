@@ -100,7 +100,7 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
             *object = Some(Value::Object(obj));
         },
         // ------ Add Number Value ------
-        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '0'..='9') => {
+        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '1'..='9') => {
             *current_status = ObjectStatus::ValueNumber { key: key.clone() };
             obj.insert(key.iter().collect::<String>(), json!(current_char.to_digit(10) ));
             *object = Some(Value::Object(obj));

@@ -19,6 +19,14 @@ mod tests {
                 let result = parse_stream(raw_json);
                 assert_eq!(result.unwrap().unwrap(), json!({"age": 1234567890}));
             }
+            
+            #[test]
+            fn test_invalid_single_key_value_pair_with_number_starting_with_zero() {
+                let raw_json = r#"{"age": 01234567890}"#;
+                let result = parse_stream(raw_json);
+                // This is invalid JSON, so we should return an error.
+                assert_eq!(result.is_err(), true);
+            }
         }
     
         mod partial_json_tests {
