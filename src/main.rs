@@ -192,6 +192,9 @@ fn add_char_into_object(
             }
             *object = Some(Value::Object(obj));
         }
+        (Some(Value::Object(_obj)), ObjectStatus::ValueNumber { key }, '.') => {
+            *current_status = ObjectStatus::ValueFloatDot { key };
+        }
 
         // ------ Finished taking value ------
         (
