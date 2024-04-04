@@ -152,7 +152,7 @@ fn add_char_into_object(
             *current_status = ObjectStatus::Closed;
         }
         (
-            Some(Value::Object(mut obj)),
+            Some(Value::Object(_obj)),
             ObjectStatus::ValueScalar {
                 key: _key,
                 mut value_so_far,
