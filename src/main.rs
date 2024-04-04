@@ -29,6 +29,10 @@ enum ObjectStatus {
     },
     // We just finished a value, likely because we just received a closing quote.
     Closed,
+    // We are taking number value
+    ValueNumber {
+        key: Vec<char>,
+    },
 }
 
 fn parse_stream(json_string: &str) -> Result<Option<Value>, String> { 
@@ -77,6 +81,7 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
             obj.insert(key.iter().collect::<String>().clone(), json!(""));
             *object = Some(Value::Object(obj));
         },
+        // ------ Add String Value ------
         (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteOpen { key: _key }, '"') => {
             *current_status = ObjectStatus::Ready;
         },
@@ -93,7 +98,27 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
             }
             *object = Some(Value::Object(obj));
         },
-        (Some(Value::Object(_obj)), ObjectStatus::Ready, '}') => {
+        // ------ Add Number Value ------
+        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '0') => {
+            *current_status = ObjectStatus::ValueNumber { key: key.clone() };
+            obj.insert(key.iter().collect::<String>(), json!(current_char.to_digit(10) ));
+            *object = Some(Value::Object(obj));
+        },
+        (Some(Value::Object(mut obj)), ObjectStatus::ValueNumber { key }, '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '0') => {
+            let key_string = key.iter().collect::<String>();
+            let value = obj.get_mut(&key_string).unwrap();
+            match value {
+                Value::Number(value) => {
+                    let new_value = value.as_i64().unwrap() * 10 + current_char.to_digit(10).unwrap() as i64;
+                    *value = new_value.into();
+                },
+                _ => {
+                    return Err(format!("Invalid value type for key {}", key_string));
+                }
+            }
+            *object = Some(Value::Object(obj));
+        },
+        (Some(Value::Object(_obj)), ObjectStatus::Ready | ObjectStatus::ValueNumber { .. }, '}') => {
             *current_status = ObjectStatus::Closed;
         },
         _ => {
