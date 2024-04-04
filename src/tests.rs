@@ -83,6 +83,27 @@ mod tests {
                 let result = parse_stream(raw_json);
                 assert_eq!(result.unwrap().unwrap(), json!({"age": 0}));
             }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_false() {
+                let raw_json = r#"{"age": false}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": false}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_true() {
+                let raw_json = r#"{"age": true}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": true}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_null() {
+                let raw_json = r#"{"age": null}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": null}));
+            }
         }
 
         mod partial_json_tests {
