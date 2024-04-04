@@ -99,12 +99,12 @@ fn add_char_into_object(object: &mut Option<Value>, current_status: &mut ObjectS
             *object = Some(Value::Object(obj));
         },
         // ------ Add Number Value ------
-        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '0') => {
+        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '0'..='9') => {
             *current_status = ObjectStatus::ValueNumber { key: key.clone() };
             obj.insert(key.iter().collect::<String>(), json!(current_char.to_digit(10) ));
             *object = Some(Value::Object(obj));
         },
-        (Some(Value::Object(mut obj)), ObjectStatus::ValueNumber { key }, '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '0') => {
+        (Some(Value::Object(mut obj)), ObjectStatus::ValueNumber { key }, '0'..='9') => {
             let key_string = key.iter().collect::<String>();
             let value = obj.get_mut(&key_string).unwrap();
             match value {

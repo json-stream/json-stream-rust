@@ -14,9 +14,9 @@ mod tests {
 
         #[test]
         fn test_single_key_value_pair_with_number() {
-            let raw_json = r#"{"age": 30}"#;
+            let raw_json = r#"{"age": 1234567890}"#;
             let result = parse_stream(raw_json);
-            assert_eq!(result.unwrap().unwrap(), json!({"age": 30}));
+            assert_eq!(result.unwrap().unwrap(), json!({"age": 1234567890}));
         }
     }
 
