@@ -49,6 +49,13 @@ mod tests {
                 let result = parse_stream(raw_json);
                 assert_eq!(result.unwrap().unwrap(), json!({"age": 1.456}));
             }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_zero() {
+                let raw_json = r#"{"age": 0}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": 0}));
+            }
         }
     
         mod partial_json_tests {

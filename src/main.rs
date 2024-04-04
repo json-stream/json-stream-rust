@@ -35,7 +35,7 @@ enum ObjectStatus {
     },
 
     // We are taking float value because we just received a zero as the first digit.
-    ValueFloatZero {
+    ValueZero {
         key: Vec<char>,
     },
     // We are taking float value because we just received a dot.
@@ -153,11 +153,11 @@ fn add_char_into_object(
 
         // ------ Add Float Value ------
         (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '0') => {
-            *current_status = ObjectStatus::ValueFloatZero { key: key.clone() };
+            *current_status = ObjectStatus::ValueZero { key: key.clone() };
             obj.insert(key.iter().collect::<String>(), json!(0));
             *object = Some(Value::Object(obj));
         }
-        (Some(Value::Object(_obj)), ObjectStatus::ValueFloatZero { key }, '.') => {
+        (Some(Value::Object(_obj)), ObjectStatus::ValueZero { key }, '.') => {
             *current_status = ObjectStatus::ValueFloatDot { key };
         }
         (Some(Value::Object(mut obj)), ObjectStatus::ValueFloatDot { key }, '0'..='9') => {
@@ -201,6 +201,7 @@ fn add_char_into_object(
             Some(Value::Object(_obj)),
             ObjectStatus::ValueQuoteClose
             | ObjectStatus::ValueNumber { .. }
+            | ObjectStatus::ValueZero { .. }
             | ObjectStatus::ValueFloat { .. },
             ',',
         ) => {
@@ -210,6 +211,7 @@ fn add_char_into_object(
             Some(Value::Object(_obj)),
             ObjectStatus::ValueQuoteClose
             | ObjectStatus::ValueNumber { .. }
+            | ObjectStatus::ValueZero { .. }
             | ObjectStatus::ValueFloat { .. },
             '}',
         ) => {
