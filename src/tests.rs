@@ -27,6 +27,13 @@ mod tests {
                 // This is invalid JSON, so we should return an error.
                 assert_eq!(result.is_err(), true);
             }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_float_starting_zero() {
+                let raw_json = r#"{"age": 0.456}"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": 0.456}));
+            }
         }
     
         mod partial_json_tests {
