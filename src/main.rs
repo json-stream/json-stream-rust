@@ -1,5 +1,5 @@
 extern crate serde_json;
-use serde_json::{json, Value};
+use serde_json::{json, value, Value};
 
 mod tests;
 
@@ -29,22 +29,12 @@ enum ObjectStatus {
     },
     ValueQuoteClose,
 
-    // We are taking number value
-    ValueNumber {
+    // We are taking any value that is not a string. For these case we just store
+    // each character until we reach a comma or a closing brace and then we pare
+    // and add the value to the object.
+    ValueScalar {
         key: Vec<char>,
-    },
-
-    // We are taking float value because we just received a zero as the first digit.
-    ValueZero {
-        key: Vec<char>,
-    },
-    // We are taking float value because we just received a dot.
-    ValueFloatDot {
-        key: Vec<char>,
-    },
-    // We are taking float value because we just received a digit after the dot.
-    ValueFloat {
-        key: Vec<char>,
+        value_so_far: Vec<char>,
     },
 
     // We just finished the object, likely because we just received a closing brace.
@@ -126,95 +116,62 @@ fn add_char_into_object(
             *object = Some(Value::Object(obj));
         }
 
-        // ------ Add Number Value ------
-        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '1'..='9') => {
-            *current_status = ObjectStatus::ValueNumber { key: key.clone() };
-            obj.insert(
-                key.iter().collect::<String>(),
-                json!(current_char.to_digit(10)),
-            );
-            *object = Some(Value::Object(obj));
+        // ------ Add Scalar Value ------
+        (Some(Value::Object(_obj)), ObjectStatus::Colon { key }, char) => {
+            *current_status = ObjectStatus::ValueScalar {
+                key,
+                value_so_far: vec![char],
+            };
         }
-        (Some(Value::Object(mut obj)), ObjectStatus::ValueNumber { key }, '0'..='9') => {
+        (Some(Value::Object(mut obj)), ObjectStatus::ValueScalar { key, value_so_far }, ',') => {
+            // parse the value and add it to the object
             let key_string = key.iter().collect::<String>();
-            let value = obj.get_mut(&key_string).unwrap();
-            match value {
-                Value::Number(value) => {
-                    let new_value =
-                        value.as_i64().unwrap() * 10 + current_char.to_digit(10).unwrap() as i64;
-                    *value = new_value.into();
+            let value_string = value_so_far.iter().collect::<String>();
+            let value = match value_string.parse::<Value>() {
+                Ok(value) => value,
+                Err(e) => {
+                    return Err(format!("Invalid value for key {}: {}", key_string, e));
                 }
-                _ => {
-                    return Err(format!("Invalid value type for key {}", key_string));
-                }
-            }
+            };
+            obj.insert(key_string, value);
             *object = Some(Value::Object(obj));
+            *current_status = ObjectStatus::StartProperty;
         }
-
-        // ------ Add Float Value ------
-        (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '0') => {
-            *current_status = ObjectStatus::ValueZero { key: key.clone() };
-            obj.insert(key.iter().collect::<String>(), json!(0));
-            *object = Some(Value::Object(obj));
-        }
-        (Some(Value::Object(_obj)), ObjectStatus::ValueZero { key }, '.') => {
-            *current_status = ObjectStatus::ValueFloatDot { key };
-        }
-        (Some(Value::Object(mut obj)), ObjectStatus::ValueFloatDot { key }, '0'..='9') => {
+        (Some(Value::Object(mut obj)), ObjectStatus::ValueScalar { key, value_so_far }, '}') => {
+            // parse the value and add it to the object
             let key_string = key.iter().collect::<String>();
-            let value = obj.get_mut(&key_string).unwrap();
-            match value {
-                Value::Number(value) => {
-                    let new_value = format!("{}.{}", value, current_char);
-                    println!("new_value: {}", new_value);
-                    let new_number: serde_json::Number = new_value.parse().unwrap();
-                    *value = new_number.into();
+            let value_string = value_so_far.iter().collect::<String>();
+            let value = match value_string.parse::<Value>() {
+                Ok(value) => value,
+                Err(e) => {
+                    return Err(format!("Invalid value for key {}: {}", key_string, e));
                 }
-                _ => {
-                    return Err(format!("Invalid value type for key {}", key_string));
-                }
-            }
+            };
+            obj.insert(key_string, value);
             *object = Some(Value::Object(obj));
-            *current_status = ObjectStatus::ValueFloat { key };
+            *current_status = ObjectStatus::Closed;
         }
-        (Some(Value::Object(mut obj)), ObjectStatus::ValueFloat { key }, '0'..='9') => {
-            let key_string = key.iter().collect::<String>();
-            let value = obj.get_mut(&key_string).unwrap();
-            match value {
-                Value::Number(value) => {
-                    let new_value = format!("{}{}", value, current_char);
-                    let new_number: serde_json::Number = new_value.parse().unwrap();
-                    *value = new_number.into();
-                }
-                _ => {
-                    return Err(format!("Invalid value type for key {}", key_string));
-                }
-            }
-            *object = Some(Value::Object(obj));
-        }
-        (Some(Value::Object(_obj)), ObjectStatus::ValueNumber { key }, '.') => {
-            *current_status = ObjectStatus::ValueFloatDot { key };
+        (
+            Some(Value::Object(mut obj)),
+            ObjectStatus::ValueScalar {
+                key: _key,
+                mut value_so_far,
+            },
+            char,
+        ) => {
+            // push the character into the value so far
+            value_so_far.push(char);
+            *current_status = ObjectStatus::ValueScalar {
+                key: _key,
+                value_so_far,
+            };
         }
 
         // ------ Finished taking value ------
-        (
-            Some(Value::Object(_obj)),
-            ObjectStatus::ValueQuoteClose
-            | ObjectStatus::ValueNumber { .. }
-            | ObjectStatus::ValueZero { .. }
-            | ObjectStatus::ValueFloat { .. },
-            ',',
-        ) => {
+        (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteClose, ',') => {
             *current_status = ObjectStatus::StartProperty;
         }
-        (
-            Some(Value::Object(_obj)),
-            ObjectStatus::ValueQuoteClose
-            | ObjectStatus::ValueNumber { .. }
-            | ObjectStatus::ValueZero { .. }
-            | ObjectStatus::ValueFloat { .. },
-            '}',
-        ) => {
+        (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteClose, '}') => {
             *current_status = ObjectStatus::Closed;
         }
         _ => {
