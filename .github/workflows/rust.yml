@@ -50,8 +50,7 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Push to crates.io
-        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
-        env:
-          CARGO_TERM_COLOR: always
+      - uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ secrets.CARGO_TOKEN }}
 
