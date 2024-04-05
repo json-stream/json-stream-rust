@@ -54,6 +54,7 @@ jobs:
         run: |
           cargo login ${{ secrets.CARGO_TOKEN }} 
           cargo owner --list
+          cargo publish
         
       - name: Publish to crates.io
         run: cargo publish
