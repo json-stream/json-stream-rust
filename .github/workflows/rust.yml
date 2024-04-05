@@ -51,7 +51,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Check to see if the CARGO_TOKEN is valid for crates.io
-        run: cargo login --registry=https://crates.io --token ${{ secrets.CARGO_TOKEN }}
+        run: cargo login --registry=https://crates.io -- --token ${{ secrets.CARGO_TOKEN }}
       - uses: katyo/publish-crates@v2
         with:
           registry-token: ${{ secrets.CARGO_TOKEN }}
