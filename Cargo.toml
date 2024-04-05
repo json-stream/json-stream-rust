@@ -1,5 +1,5 @@
 [package]
-name = "json-stream-rust"
+name = "json-stream"
 version = "0.1.0"
 edition = "2021"
 
