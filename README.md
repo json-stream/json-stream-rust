@@ -12,7 +12,7 @@ To include JSON Stream Parser in your project, add the following to your `Cargo.
 
 ```toml
 [dependencies]
-json_stream_parser = "0.1.0"
+json-stream-parser = "0.1.0"
 ```
 
 Then, run `cargo build` to build your project.
