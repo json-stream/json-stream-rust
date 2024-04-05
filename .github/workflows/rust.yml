@@ -50,12 +50,9 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Check to see if the CARGO_TOKEN is valid for crates.io
-        run: |
-          cargo login ${{ secrets.CARGO_TOKEN }} 
-          cargo owner --list
-          cargo publish
-        
-      - name: Publish to crates.io
-        run: cargo publish
+      - name: Publish crates
+        uses: katyo/publish-crates@v2
+        with:
+            registry-token: ${{ secrets.CARGO_TOKEN }}
+            ignore-unpublished-changes: true
 
