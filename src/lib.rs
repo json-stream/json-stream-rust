@@ -154,9 +154,7 @@ fn add_char_into_object(
         }
 
         // ------ white spaces ------
-        (_, _, ' ' | '\n') => {
-            // ignore whitespace
-        }
+        (_, _, ' ' | '\n') => {}
         _ => {
             return Err(format!("Invalid character {}", current_char));
         }
