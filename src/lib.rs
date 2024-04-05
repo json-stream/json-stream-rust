@@ -46,21 +46,20 @@ fn add_char_into_object(
     current_status: &mut ObjectStatus,
     current_char: char,
 ) -> Result<(), String> {
-    match (object.clone(), current_status.clone(), current_char) {
-        (Value::Null, ObjectStatus::Ready, '{') => {
-            *object = json!({});
+    match (object, current_status.clone(), current_char) {
+        (obj, ObjectStatus::Ready, '{') if obj == &Value::Null => {
+            *obj = json!({});
             *current_status = ObjectStatus::StartProperty;
         }
         (Value::Object(_obj), ObjectStatus::StartProperty, '"') => {
             *current_status = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
         }
-        (Value::Object(mut obj), ObjectStatus::KeyQuoteOpen { key_so_far }, '"') => {
+        (Value::Object(ref mut obj), ObjectStatus::KeyQuoteOpen { key_so_far }, '"') => {
             *current_status = ObjectStatus::KeyQuoteClose {
                 key: key_so_far.clone(),
             };
             // add the key to the object with null value
             obj.insert(key_so_far.iter().collect::<String>(), Value::Null);
-            *object = Value::Object(obj);
         }
         (Value::Object(_obj), ObjectStatus::KeyQuoteOpen { mut key_so_far }, char) => {
             key_so_far.push(char);
@@ -70,17 +69,16 @@ fn add_char_into_object(
             *current_status = ObjectStatus::Colon { key };
         }
         (Value::Object(_obj), ObjectStatus::Colon { .. }, ' ' | '\n') => {}
-        (Value::Object(mut obj), ObjectStatus::Colon { key }, '"') => {
+        (Value::Object(ref mut obj), ObjectStatus::Colon { key }, '"') => {
             *current_status = ObjectStatus::ValueQuoteOpen { key: key.clone() };
             // create an empty string for the value
             obj.insert(key.iter().collect::<String>().clone(), json!(""));
-            *object = Value::Object(obj);
         }
         // ------ Add String Value ------
         (Value::Object(_obj), ObjectStatus::ValueQuoteOpen { key: _key }, '"') => {
             *current_status = ObjectStatus::ValueQuoteClose;
         }
-        (Value::Object(mut obj), ObjectStatus::ValueQuoteOpen { key }, char) => {
+        (Value::Object(ref mut obj), ObjectStatus::ValueQuoteOpen { key }, char) => {
             let key_string = key.iter().collect::<String>();
             let value = obj.get_mut(&key_string).unwrap();
             match value {
@@ -91,7 +89,6 @@ fn add_char_into_object(
                     return Err(format!("Invalid value type for key {}", key_string));
                 }
             }
-            *object = Value::Object(obj);
         }
 
         // ------ Add Scalar Value ------
@@ -101,7 +98,7 @@ fn add_char_into_object(
                 value_so_far: vec![char],
             };
         }
-        (Value::Object(mut obj), ObjectStatus::ValueScalar { key, value_so_far }, ',') => {
+        (Value::Object(ref mut obj), ObjectStatus::ValueScalar { key, value_so_far }, ',') => {
             // parse the value and add it to the object
             let key_string = key.iter().collect::<String>();
             let value_string = value_so_far.iter().collect::<String>();
@@ -112,10 +109,9 @@ fn add_char_into_object(
                 }
             };
             obj.insert(key_string, value);
-            *object = Value::Object(obj);
             *current_status = ObjectStatus::StartProperty;
         }
-        (Value::Object(mut obj), ObjectStatus::ValueScalar { key, value_so_far }, '}') => {
+        (Value::Object(ref mut obj), ObjectStatus::ValueScalar { key, value_so_far }, '}') => {
             // parse the value and add it to the object
             let key_string = key.iter().collect::<String>();
             let value_string = value_so_far.iter().collect::<String>();
@@ -126,7 +122,6 @@ fn add_char_into_object(
                 }
             };
             obj.insert(key_string, value);
-            *object = Value::Object(obj);
             *current_status = ObjectStatus::Closed;
         }
         (
