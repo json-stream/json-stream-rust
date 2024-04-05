@@ -51,9 +51,6 @@ fn add_char_into_object(
             *object = Some(json!({}));
             *current_status = ObjectStatus::StartProperty;
         }
-        (_, _, ' ') => {
-            // ignore whitespace
-        }
         (Some(Value::Object(_obj)), ObjectStatus::StartProperty, '"') => {
             *current_status = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
         }
@@ -72,6 +69,7 @@ fn add_char_into_object(
         (Some(Value::Object(_obj)), ObjectStatus::KeyQuoteClose { key }, ':') => {
             *current_status = ObjectStatus::Colon { key };
         }
+        (Some(Value::Object(_obj)), ObjectStatus::Colon { .. }, ' ') => {}
         (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '"') => {
             *current_status = ObjectStatus::ValueQuoteOpen { key: key.clone() };
             // create an empty string for the value
@@ -153,6 +151,11 @@ fn add_char_into_object(
         }
         (Some(Value::Object(_obj)), ObjectStatus::ValueQuoteClose, '}') => {
             *current_status = ObjectStatus::Closed;
+        }
+
+        // ------ white spaces ------
+        (_, _, ' ') => {
+            // ignore whitespace
         }
         _ => {
             return Err(format!("Invalid character {}", current_char));
@@ -284,6 +287,62 @@ mod tests {
                 let raw_json = r#"{"age": null}"#;
                 let result = parse_stream::parse_stream(raw_json);
                 assert_eq!(result.unwrap().unwrap(), json!({"age": null}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_empty_string() {
+                let raw_json = r#"{"age": ""}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": ""}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_1() {
+                let raw_json = r#"{"age": "  "}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": "  "}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_2() {
+                let raw_json = r#"{"age": "  a  "}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": "  a  "}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_3() {
+                let raw_json = r#"{"age": "a  "}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": "a  "}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_4() {
+                let raw_json = r#"{"age": "  a"}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": "  a"}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_5() {
+                let raw_json = r#"{"a ge": 23}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"a ge": 23}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_6() {
+                let raw_json = r#"{"age ": 23}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age ": 23}));
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_7() {
+                let raw_json = r#"{" age": 23}"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({" age": 23}));
             }
         }
 
