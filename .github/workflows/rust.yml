@@ -17,7 +17,7 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
 
-  print-version:
+  set-local-version:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -38,3 +38,20 @@ jobs:
       
       - name: Print Version
         run: echo "The version of the Rust library is ${{ steps.get_version.outputs.LIB_LOCAL_VERSION }}"
+  
+  cargo-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Push to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
+        env:
+          CARGO_TERM_COLOR: always
+
