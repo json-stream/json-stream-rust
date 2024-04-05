@@ -19,32 +19,23 @@ Then, run `cargo build` to build your project.
 
 ## Usage
 
-If you have an icomplete JSON object, you can parse it incrementally with the `JsonStreamParser` struct. Here's an example:
+The simplest way to use this library is to use the `parse_stream` function, which takes a string slice and returns a `Result` containing a `serde_json::Value` if successful.
+Here's an example:
 
 ```rust
-use json_stream::JsonStreamParser;
-
-let mut parser = JsonStreamParser::new();
-let json = r#"{
-  "name": "McLaren F1",
-  "top_speed": 240,
-  "inspiration": "The McLaren F1 is a sports car designed and manufactured by British automobile manufacturer McLaren Cars and powe"#
-
-for c in json.chars() {
-    parser.parse(c);
+fn main() {
+    let incomplete_json = r#"{"key": "value""#;
+    let parsed_json = json_stream_parser::parse_stream(incomplete_json);
+    if let Ok(json) = parsed_json {
+        println!("{:?}", json);
+    }
 }
-
-let result = parser.finish();
 ```
 
-As you can see this object is incomplete, but the parser will still be able to parse it to:
+As you can see this object is incomplete, but the parser will still be able to parse it:
 
-```json
-{
-  "name": "McLaren F1",
-  "top_speed": 240,
-  "inspiration": "The McLaren F1 is a sports car designed and manufactured by British automobile manufacturer McLaren Cars and powe"
-}
+```rust
+Some(Object {"key": String("value")})
 ```
 
 ## Testing
