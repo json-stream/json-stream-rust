@@ -69,7 +69,7 @@ fn add_char_into_object(
         (Some(Value::Object(_obj)), ObjectStatus::KeyQuoteClose { key }, ':') => {
             *current_status = ObjectStatus::Colon { key };
         }
-        (Some(Value::Object(_obj)), ObjectStatus::Colon { .. }, ' ') => {}
+        (Some(Value::Object(_obj)), ObjectStatus::Colon { .. }, ' ' | '\n') => {}
         (Some(Value::Object(mut obj)), ObjectStatus::Colon { key }, '"') => {
             *current_status = ObjectStatus::ValueQuoteOpen { key: key.clone() };
             // create an empty string for the value
@@ -154,7 +154,7 @@ fn add_char_into_object(
         }
 
         // ------ white spaces ------
-        (_, _, ' ') => {
+        (_, _, ' ' | '\n') => {
             // ignore whitespace
         }
         _ => {
@@ -353,6 +353,16 @@ mod tests {
                     result.unwrap().unwrap(),
                     json!({"age": 23, " height ": 180})
                 );
+            }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_line_breaks_1() {
+                let raw_json = r#"{
+                    "age": 23,
+                    "name": "John"
+                }"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap().unwrap(), json!({"age": 23, "name": "John"}));
             }
         }
 
