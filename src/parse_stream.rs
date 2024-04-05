@@ -344,6 +344,16 @@ mod tests {
                 let result = parse_stream::parse_stream(raw_json);
                 assert_eq!(result.unwrap().unwrap(), json!({" age": 23}));
             }
+
+            #[test]
+            fn test_invalid_single_key_value_pair_with_string_with_spaces_8() {
+                let raw_json = r#"{ "age":  23  , " height ": 180 }"#;
+                let result = parse_stream::parse_stream(raw_json);
+                assert_eq!(
+                    result.unwrap().unwrap(),
+                    json!({"age": 23, " height ": 180})
+                );
+            }
         }
 
         mod partial_json_tests {
