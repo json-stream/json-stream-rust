@@ -52,7 +52,6 @@ jobs:
           override: true
       - name: Check to see if the CARGO_TOKEN is valid for crates.io
         run: cargo login ${{ secrets.CARGO_TOKEN }}
-      - uses: katyo/publish-crates@v2
-        with:
-          registry-token: ${{ secrets.CARGO_TOKEN }}
+      - name: Publish to crates.io
+        run: cargo publish
 
