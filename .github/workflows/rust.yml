@@ -51,7 +51,7 @@ jobs:
           toolchain: stable
           override: true
       - name: Check to see if the CARGO_TOKEN is valid for crates.io
-        run: cargo login ${{ secrets.CARGO_TOKEN }}
+        run: cargo login ${{ secrets.CARGO_TOKEN }} || cargo owner --list
       - name: Publish to crates.io
         run: cargo publish
 
