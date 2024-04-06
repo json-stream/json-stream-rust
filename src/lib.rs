@@ -199,6 +199,48 @@ impl JsonStreamParser {
 
 #[cfg(test)]
 mod tests {
+    mod string {
+        mod valid_json_tests {
+            use crate::{parse_stream, JsonStreamParser};
+            use serde_json::json;
+
+            #[test]
+            fn test_single_quote() {
+                let raw_json = r#"""#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap(), json!(""));
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), &json!(""));
+            }
+
+            #[test]
+            fn test_single_character_without_close_quote() {
+                let raw_json = r#""a"#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap(), json!("a"));
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), &json!("a"));
+            }
+
+            #[test]
+            fn test_single_character_with_close_quote() {
+                let raw_json = r#""a""#;
+                let result = parse_stream(raw_json);
+                assert_eq!(result.unwrap(), json!("a"));
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), &json!("a"));
+            }
+
+    }
     mod object_one_property {
         mod valid_json_tests {
             use crate::{parse_stream, JsonStreamParser};
