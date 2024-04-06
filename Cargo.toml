@@ -7,7 +7,7 @@ description = "A JSON parser that is capable of parsing incomplete JSON strings 
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/json-stream/json-stream-rust"
-keywords = ["json", "parser", "stream", "incomplete", "llm", "completion", "real-time", "streaming", "partial"]
+keywords = ["json", "parser", "stream", "reactive", "streaming"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
