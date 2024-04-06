@@ -67,7 +67,3 @@ Communicate intentions through the Issues for any major changes. Feel free contr
 ## License
 
 This project is licensed under the MIT License.
-
-```
-
-```
