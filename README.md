@@ -46,7 +46,7 @@ fn main() {
 As the characters are streamed in, the parser will update the result as follows:
 
 ```rust
-Some(Object {})
+Some(Object {}) // stays empty until the closing quote for key is found
 Some(Object {"key": Null})
 Some(Object {"key": String("")})
 Some(Object {"key": String("v")})

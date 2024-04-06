@@ -192,8 +192,8 @@ impl JsonStreamParser {
         add_char_into_object(&mut self.object, &mut self.current_status, current_char)
     }
 
-    pub fn get_result(&self) -> Value {
-        self.object.clone()
+    pub fn get_result(&self) -> &Value {
+        &self.object
     }
 }
 
@@ -208,12 +208,12 @@ mod tests {
             fn test_single_key_value_pair() {
                 let raw_json = r#"{"key": "value"}"#;
                 let result = parse_stream(raw_json); // Call the parse_stream function correctly
-                assert_eq!(result.unwrap(), json!({"key": "value"}));
+                assert_eq!(result.unwrap(), json!({"key": "value"})); // Dereference the &Value to compare with Value
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
                     parser.add_char(c);
                 }
-                assert_eq!(parser.get_result(), json!({"key": "value"}));
+                assert_eq!(parser.get_result(), &json!({"key": "value"}));
             }
 
             #[test]
@@ -225,7 +225,7 @@ mod tests {
                 for c in raw_json.chars() {
                     parser.add_char(c);
                 }
-                assert_eq!(parser.get_result(), json!({"age": 1234567890}));
+                assert_eq!(parser.get_result(), &json!({"age": 1234567890}));
             }
 
             #[test]
