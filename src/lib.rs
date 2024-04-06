@@ -47,8 +47,8 @@ fn add_char_into_object(
     current_char: char,
 ) -> Result<(), String> {
     match (object, current_status.clone(), current_char) {
-        (obj, ObjectStatus::Ready, '{') if obj == &Value::Null => {
-            *obj = json!({});
+        (val @ Value::Null, ObjectStatus::Ready, '{') => {
+            *val = json!({});
             *current_status = ObjectStatus::StartProperty;
         }
         (Value::Object(_obj), ObjectStatus::StartProperty, '"') => {
@@ -175,11 +175,33 @@ pub fn parse_stream(json_string: &str) -> Result<Value, String> {
     return Ok(out);
 }
 
+pub struct JsonStreamParser {
+    object: Value,
+    current_status: ObjectStatus,
+}
+
+impl JsonStreamParser {
+    pub fn new() -> JsonStreamParser {
+        JsonStreamParser {
+            object: Value::Null,
+            current_status: ObjectStatus::Ready,
+        }
+    }
+
+    pub fn add_char(&mut self, current_char: char) -> Result<(), String> {
+        add_char_into_object(&mut self.object, &mut self.current_status, current_char)
+    }
+
+    pub fn get_result(&self) -> Value {
+        self.object.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     mod object_one_property {
         mod valid_json_tests {
-            use crate::parse_stream;
+            use crate::{parse_stream, JsonStreamParser};
             use serde_json::json;
 
             #[test]
@@ -187,6 +209,11 @@ mod tests {
                 let raw_json = r#"{"key": "value"}"#;
                 let result = parse_stream(raw_json); // Call the parse_stream function correctly
                 assert_eq!(result.unwrap(), json!({"key": "value"}));
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), json!({"key": "value"}));
             }
 
             #[test]
@@ -194,6 +221,11 @@ mod tests {
                 let raw_json = r#"{"age": 1234567890}"#;
                 let result = parse_stream(raw_json); // Call the parse_stream function correctly
                 assert_eq!(result.unwrap(), json!({"age": 1234567890}));
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), json!({"age": 1234567890}));
             }
 
             #[test]
