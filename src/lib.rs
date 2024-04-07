@@ -239,7 +239,7 @@ mod tests {
                 }
                 assert_eq!(parser.get_result(), &json!("a"));
             }
-
+        }
     }
     mod object_one_property {
         mod valid_json_tests {
