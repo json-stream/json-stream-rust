@@ -4,6 +4,10 @@ use serde_json::{json, Value};
 enum ObjectStatus {
     // We are ready to start a new object.
     Ready,
+    // We are in the beginning of a string, likely because we just received an opening quote.
+    StringQuoteOpen,
+    // We just finished a string, likely because we just received a closing quote.
+    StringQuoteClose,
     // We just started a property, likely because we just received an opening brace or a comma in case of an existing object.
     StartProperty,
     // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
@@ -47,9 +51,20 @@ fn add_char_into_object(
     current_char: char,
 ) -> Result<(), String> {
     match (object, current_status.clone(), current_char) {
+        (val @ Value::Null, ObjectStatus::Ready, '"') => {
+            *val = json!("");
+            *current_status = ObjectStatus::StringQuoteOpen;
+        }
         (val @ Value::Null, ObjectStatus::Ready, '{') => {
             *val = json!({});
             *current_status = ObjectStatus::StartProperty;
+        }
+        (Value::String(str), ObjectStatus::StringQuoteOpen, '"') => {
+            *current_status = ObjectStatus::StringQuoteClose;
+        }
+        (Value::String(str), ObjectStatus::StringQuoteOpen, char) => {
+            str.push(char);
+            *current_status = ObjectStatus::StringQuoteOpen;
         }
         (Value::Object(_obj), ObjectStatus::StartProperty, '"') => {
             *current_status = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
