@@ -59,7 +59,7 @@ fn add_char_into_object(
             *val = json!({});
             *current_status = ObjectStatus::StartProperty;
         }
-        (Value::String(str), ObjectStatus::StringQuoteOpen, '"') => {
+        (Value::String(_str), ObjectStatus::StringQuoteOpen, '"') => {
             *current_status = ObjectStatus::StringQuoteClose;
         }
         (Value::String(str), ObjectStatus::StringQuoteOpen, char) => {
