@@ -54,133 +54,145 @@ fn add_char_into_object(
     current_status: &mut ObjectStatus,
     current_char: char,
 ) -> Result<(), String> {
-    match (object, current_status.clone(), current_char) {
-        (val @ Value::Null, ObjectStatus::Ready, '"') => {
+    match (object, current_status, current_char) {
+        (val @ Value::Null, sts @ ObjectStatus::Ready, '"') => {
             *val = json!("");
-            *current_status = ObjectStatus::StringQuoteOpen;
+            *sts = ObjectStatus::StringQuoteOpen;
         }
-        (val @ Value::Null, ObjectStatus::Ready, '{') => {
+        (val @ Value::Null, sts @ ObjectStatus::Ready, '{') => {
             *val = json!({});
-            *current_status = ObjectStatus::StartProperty;
+            *sts = ObjectStatus::StartProperty;
         }
-        // ------ true ------
-        (val @ Value::Null, ObjectStatus::Ready, 't') => {
+        // // ------ true ------
+        (val @ Value::Null, sts @ ObjectStatus::Ready, 't') => {
             *val = json!(true);
-            *current_status = ObjectStatus::Scalar {
+            *sts = ObjectStatus::Scalar {
                 value_so_far: vec!['t'],
             };
         }
-        (Value::Bool(true), ObjectStatus::Scalar { ref value_so_far }, 'r')
-            if *value_so_far == vec!['t'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['t', 'r'],
-            };
+        (
+            Value::Bool(true),
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            'r',
+        ) if *value_so_far == vec!['t'] => {
+            value_so_far.push('r');
         }
-        (Value::Bool(true), ObjectStatus::Scalar { ref value_so_far }, 'u')
-            if *value_so_far == vec!['t', 'r'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['t', 'r', 'u'],
-            };
+        (
+            Value::Bool(true),
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            'u',
+        ) if *value_so_far == vec!['t', 'r'] => {
+            value_so_far.push('u');
         }
-        (Value::Bool(true), ObjectStatus::Scalar { ref value_so_far }, 'e')
-            if *value_so_far == vec!['t', 'r', 'u'] =>
-        {
-            *current_status = ObjectStatus::Closed;
+        (Value::Bool(true), sts @ ObjectStatus::Scalar { .. }, 'e') => {
+            *sts = ObjectStatus::Closed;
         }
         // ------ false ------
-        (val @ Value::Null, ObjectStatus::Ready, 'f') => {
+        (val @ Value::Null, sts @ ObjectStatus::Ready, 'f') => {
             *val = json!(false);
-            *current_status = ObjectStatus::Scalar {
+            *sts = ObjectStatus::Scalar {
                 value_so_far: vec!['f'],
             };
         }
-        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 'a')
-            if *value_so_far == vec!['f'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['f', 'a'],
-            };
+        (
+            Value::Bool(false),
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            'a',
+        ) if *value_so_far == vec!['f'] => {
+            value_so_far.push('a');
         }
-        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 'l')
-            if *value_so_far == vec!['f', 'a'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['f', 'a', 'l'],
-            };
+        (
+            Value::Bool(false),
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            'l',
+        ) if *value_so_far == vec!['f', 'a'] => {
+            value_so_far.push('l');
         }
-        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 's')
-            if *value_so_far == vec!['f', 'a', 'l'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['f', 'a', 'l', 's'],
-            };
+        (
+            Value::Bool(false),
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            's',
+        ) if *value_so_far == vec!['f', 'a', 'l'] => {
+            value_so_far.push('s');
         }
-        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 'e')
-            if *value_so_far == vec!['f', 'a', 'l', 's'] =>
-        {
-            *current_status = ObjectStatus::Closed;
+        (Value::Bool(false), sts @ ObjectStatus::Scalar { .. }, 'e') => {
+            *sts = ObjectStatus::Closed;
         }
         // ------ null ------
-        (val @ Value::Null, ObjectStatus::Ready, 'n') => {
+        (val @ Value::Null, sts @ ObjectStatus::Ready, 'n') => {
             *val = json!(null);
-            *current_status = ObjectStatus::Scalar {
+            *sts = ObjectStatus::Scalar {
                 value_so_far: vec!['n'],
             };
         }
-        (Value::Null, ObjectStatus::Scalar { ref value_so_far }, 'u')
-            if *value_so_far == vec!['n'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['n', 'u'],
-            };
+        (
+            Value::Null,
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            'u',
+        ) if *value_so_far == vec!['n'] => {
+            value_so_far.push('u');
         }
-        (Value::Null, ObjectStatus::Scalar { ref value_so_far }, 'l')
-            if *value_so_far == vec!['n', 'u'] =>
-        {
-            *current_status = ObjectStatus::Scalar {
-                value_so_far: vec!['n', 'u', 'l'],
-            };
+        (
+            Value::Null,
+            ObjectStatus::Scalar {
+                ref mut value_so_far,
+            },
+            'l',
+        ) if *value_so_far == vec!['n', 'u'] => {
+            value_so_far.push('l');
         }
-        (Value::Null, ObjectStatus::Scalar { ref value_so_far }, 'l')
-            if *value_so_far == vec!['n', 'u', 'l'] =>
-        {
-            *current_status = ObjectStatus::Closed;
+        (Value::Null, sts @ ObjectStatus::Scalar { .. }, 'l') => {
+            *sts = ObjectStatus::Closed;
         }
-        (Value::String(_str), ObjectStatus::StringQuoteOpen, '"') => {
-            *current_status = ObjectStatus::StringQuoteClose;
+        (Value::String(_str), sts @ ObjectStatus::StringQuoteOpen, '"') => {
+            *sts = ObjectStatus::StringQuoteClose;
         }
-        (Value::String(str), ObjectStatus::StringQuoteOpen, char) => {
+        (Value::String(str), sts @ ObjectStatus::StringQuoteOpen, char) => {
             str.push(char);
-            *current_status = ObjectStatus::StringQuoteOpen;
+            *sts = ObjectStatus::StringQuoteOpen;
         }
-        (Value::Object(_obj), ObjectStatus::StartProperty, '"') => {
-            *current_status = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
+        (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '"') => {
+            *sts = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
         }
-        (Value::Object(ref mut obj), ObjectStatus::KeyQuoteOpen { key_so_far }, '"') => {
-            *current_status = ObjectStatus::KeyQuoteClose {
-                key: key_so_far.clone(),
-            };
-            // add the key to the object with null value
-            obj.insert(key_so_far.iter().collect::<String>(), Value::Null);
+        (Value::Object(ref mut obj), sts @ ObjectStatus::KeyQuoteOpen { .. }, '"') => {
+            if let ObjectStatus::KeyQuoteOpen { key_so_far } = sts.clone() {
+                *sts = ObjectStatus::KeyQuoteClose {
+                    key: key_so_far.clone(),
+                };
+                obj.insert(key_so_far.iter().collect::<String>(), Value::Null);
+            }
         }
-        (Value::Object(_obj), ObjectStatus::KeyQuoteOpen { mut key_so_far }, char) => {
+        (Value::Object(_obj), ObjectStatus::KeyQuoteOpen { ref mut key_so_far }, char) => {
             key_so_far.push(char);
-            *current_status = ObjectStatus::KeyQuoteOpen { key_so_far };
         }
-        (Value::Object(_obj), ObjectStatus::KeyQuoteClose { key }, ':') => {
-            *current_status = ObjectStatus::Colon { key };
+        (Value::Object(_obj), sts @ ObjectStatus::KeyQuoteClose { .. }, ':') => {
+            if let ObjectStatus::KeyQuoteClose { key } = sts.clone() {
+                *sts = ObjectStatus::Colon { key: key.clone() };
+            }
         }
-        (Value::Object(_obj), ObjectStatus::Colon { .. }, ' ' | '\n') => {}
-        (Value::Object(ref mut obj), ObjectStatus::Colon { key }, '"') => {
-            *current_status = ObjectStatus::ValueQuoteOpen { key: key.clone() };
-            // create an empty string for the value
-            obj.insert(key.iter().collect::<String>().clone(), json!(""));
+        (Value::Object(_obj), sts @ ObjectStatus::Colon { .. }, ' ' | '\n') => {}
+        (Value::Object(ref mut obj), sts @ ObjectStatus::Colon { .. }, '"') => {
+            if let ObjectStatus::Colon { key } = sts.clone() {
+                *sts = ObjectStatus::ValueQuoteOpen { key: key.clone() };
+                // create an empty string for the value
+                obj.insert(key.iter().collect::<String>().clone(), json!(""));
+            }
         }
         // ------ Add String Value ------
-        (Value::Object(_obj), ObjectStatus::ValueQuoteOpen { key: _key }, '"') => {
-            *current_status = ObjectStatus::ValueQuoteClose;
+        (Value::Object(_obj), sts @ ObjectStatus::ValueQuoteOpen { .. }, '"') => {
+            *sts = ObjectStatus::ValueQuoteClose;
         }
         (Value::Object(ref mut obj), ObjectStatus::ValueQuoteOpen { key }, char) => {
             let key_string = key.iter().collect::<String>();
@@ -196,65 +208,65 @@ fn add_char_into_object(
         }
 
         // ------ Add Scalar Value ------
-        (Value::Object(_obj), ObjectStatus::Colon { key }, char) => {
-            *current_status = ObjectStatus::ValueScalar {
-                key,
-                value_so_far: vec![char],
-            };
+        (Value::Object(_obj), sts @ ObjectStatus::Colon { .. }, char) => {
+            if let ObjectStatus::Colon { key } = sts.clone() {
+                *sts = ObjectStatus::ValueScalar {
+                    key: key.clone(),
+                    value_so_far: vec![char],
+                };
+            }
         }
-        (Value::Object(ref mut obj), ObjectStatus::ValueScalar { key, value_so_far }, ',') => {
-            // parse the value and add it to the object
-            let key_string = key.iter().collect::<String>();
-            let value_string = value_so_far.iter().collect::<String>();
-            let value = match value_string.parse::<Value>() {
-                Ok(value) => value,
-                Err(e) => {
-                    return Err(format!("Invalid value for key {}: {}", key_string, e));
-                }
-            };
-            obj.insert(key_string, value);
-            *current_status = ObjectStatus::StartProperty;
+        (Value::Object(ref mut obj), sts @ ObjectStatus::ValueScalar { .. }, ',') => {
+            if let ObjectStatus::ValueScalar { key, value_so_far } = sts.clone() {
+                let key_string = key.iter().collect::<String>();
+                let value_string = value_so_far.iter().collect::<String>();
+                let value = match value_string.parse::<Value>() {
+                    Ok(value) => value,
+                    Err(e) => {
+                        return Err(format!("Invalid value for key {}: {}", key_string, e));
+                    }
+                };
+                obj.insert(key_string, value);
+                *sts = ObjectStatus::StartProperty;
+            }
         }
-        (Value::Object(ref mut obj), ObjectStatus::ValueScalar { key, value_so_far }, '}') => {
-            // parse the value and add it to the object
-            let key_string = key.iter().collect::<String>();
-            let value_string = value_so_far.iter().collect::<String>();
-            let value = match value_string.parse::<Value>() {
-                Ok(value) => value,
-                Err(e) => {
-                    return Err(format!("Invalid value for key {}: {}", key_string, e));
-                }
-            };
-            obj.insert(key_string, value);
-            *current_status = ObjectStatus::Closed;
+        (Value::Object(ref mut obj), sts @ ObjectStatus::ValueScalar { .. }, '}') => {
+            if let ObjectStatus::ValueScalar { key, value_so_far } = sts.clone() {
+                let key_string = key.iter().collect::<String>();
+                let value_string = value_so_far.iter().collect::<String>();
+                let value = match value_string.parse::<Value>() {
+                    Ok(value) => value,
+                    Err(e) => {
+                        return Err(format!("Invalid value for key {}: {}", key_string, e));
+                    }
+                };
+                obj.insert(key_string, value);
+                *sts = ObjectStatus::Closed;
+            }
         }
         (
             Value::Object(_obj),
             ObjectStatus::ValueScalar {
                 key: _key,
-                mut value_so_far,
+                ref mut value_so_far,
             },
             char,
         ) => {
             // push the character into the value so far
             value_so_far.push(char);
-            *current_status = ObjectStatus::ValueScalar {
-                key: _key,
-                value_so_far,
-            };
         }
 
         // ------ Finished taking value ------
-        (Value::Object(_obj), ObjectStatus::ValueQuoteClose, ',') => {
-            *current_status = ObjectStatus::StartProperty;
+        (Value::Object(_obj), sts @ ObjectStatus::ValueQuoteClose, ',') => {
+            *sts = ObjectStatus::StartProperty;
         }
-        (Value::Object(_obj), ObjectStatus::ValueQuoteClose, '}') => {
-            *current_status = ObjectStatus::Closed;
+        (Value::Object(_obj), sts @ ObjectStatus::ValueQuoteClose, '}') => {
+            *sts = ObjectStatus::Closed;
         }
 
-        // ------ white spaces ------
+        // // ------ white spaces ------
         (_, _, ' ' | '\n') => {}
-        (val, st, c) => {
+        (_val, st, c) => {
             return Err(format!("Invalid character {} status: {:?}", c, st));
         }
     }
