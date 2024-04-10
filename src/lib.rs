@@ -63,6 +63,7 @@ fn add_char_into_object(
             *val = json!({});
             *current_status = ObjectStatus::StartProperty;
         }
+        // ------ true ------
         (val @ Value::Null, ObjectStatus::Ready, 't') => {
             *val = json!(true);
             *current_status = ObjectStatus::Scalar {
@@ -88,6 +89,7 @@ fn add_char_into_object(
         {
             *current_status = ObjectStatus::Closed;
         }
+        // ------ false ------
         (val @ Value::Null, ObjectStatus::Ready, 'f') => {
             *val = json!(false);
             *current_status = ObjectStatus::Scalar {
@@ -120,6 +122,7 @@ fn add_char_into_object(
         {
             *current_status = ObjectStatus::Closed;
         }
+        // ------ null ------
         (val @ Value::Null, ObjectStatus::Ready, 'n') => {
             *val = json!(null);
             *current_status = ObjectStatus::Scalar {
