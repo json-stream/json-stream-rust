@@ -1,3 +1,5 @@
+![crates.io](https://img.shields.io/crates/v/json-stream-parser.svg)
+
 # JSON Stream Parser in Rust
 
 This project is a library that provides an incremental JSON parser, built with Rust. It's designed to parse a stream of JSON data, making it suited for situations where you might not have the entire JSON object available when parsing begins — for example, in the case of streaming a structured response from a Large Language Model.
