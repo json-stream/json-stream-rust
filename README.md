@@ -28,7 +28,7 @@ fn main() {
 As you can see this object is incomplete, but the parser will still be able to parse it:
 
 ```rust
-Some(Object {"key": String("value")})
+Object {"key": String("value")}
 ```
 
 Alternatively, you can use the `JsonStreamParser` struct to parse a stream of JSON data incrementally. Here's an example:
@@ -48,14 +48,14 @@ fn main() {
 As the characters are streamed in, the parser will update the result as follows:
 
 ```rust
-Some(Object {}) // stays empty until the closing quote for key is found
-Some(Object {"key": Null})
-Some(Object {"key": String("")})
-Some(Object {"key": String("v")})
-Some(Object {"key": String("va")})
-Some(Object {"key": String("val")})
-Some(Object {"key": String("valu")})
-Some(Object {"key": String("value")})
+Object {} // stays empty until the closing quote for key is found
+Object {"key": Null}
+Object {"key": String("")}
+Object {"key": String("v")}
+Object {"key": String("va")}
+Object {"key": String("val")}
+Object {"key": String("valu")}
+Object {"key": String("value")}
 ```
 
 ## Testing
