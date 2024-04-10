@@ -8,6 +8,10 @@ enum ObjectStatus {
     StringQuoteOpen,
     // We just finished a string, likely because we just received a closing quote.
     StringQuoteClose,
+    // We are in the middle of a scalar value, likely because we just received a digit.
+    Scalar {
+        value_so_far: Vec<char>,
+    },
     // We just started a property, likely because we just received an opening brace or a comma in case of an existing object.
     StartProperty,
     // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
@@ -58,6 +62,88 @@ fn add_char_into_object(
         (val @ Value::Null, ObjectStatus::Ready, '{') => {
             *val = json!({});
             *current_status = ObjectStatus::StartProperty;
+        }
+        (val @ Value::Null, ObjectStatus::Ready, 't') => {
+            *val = json!(true);
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['t'],
+            };
+        }
+        (Value::Bool(true), ObjectStatus::Scalar { ref value_so_far }, 'r')
+            if *value_so_far == vec!['t'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['t', 'r'],
+            };
+        }
+        (Value::Bool(true), ObjectStatus::Scalar { ref value_so_far }, 'u')
+            if *value_so_far == vec!['t', 'r'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['t', 'r', 'u'],
+            };
+        }
+        (Value::Bool(true), ObjectStatus::Scalar { ref value_so_far }, 'e')
+            if *value_so_far == vec!['t', 'r', 'u'] =>
+        {
+            *current_status = ObjectStatus::Closed;
+        }
+        (val @ Value::Null, ObjectStatus::Ready, 'f') => {
+            *val = json!(false);
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['f'],
+            };
+        }
+        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 'a')
+            if *value_so_far == vec!['f'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['f', 'a'],
+            };
+        }
+        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 'l')
+            if *value_so_far == vec!['f', 'a'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['f', 'a', 'l'],
+            };
+        }
+        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 's')
+            if *value_so_far == vec!['f', 'a', 'l'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['f', 'a', 'l', 's'],
+            };
+        }
+        (Value::Bool(false), ObjectStatus::Scalar { ref value_so_far }, 'e')
+            if *value_so_far == vec!['f', 'a', 'l', 's'] =>
+        {
+            *current_status = ObjectStatus::Closed;
+        }
+        (val @ Value::Null, ObjectStatus::Ready, 'n') => {
+            *val = json!(null);
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['n'],
+            };
+        }
+        (Value::Null, ObjectStatus::Scalar { ref value_so_far }, 'u')
+            if *value_so_far == vec!['n'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['n', 'u'],
+            };
+        }
+        (Value::Null, ObjectStatus::Scalar { ref value_so_far }, 'l')
+            if *value_so_far == vec!['n', 'u'] =>
+        {
+            *current_status = ObjectStatus::Scalar {
+                value_so_far: vec!['n', 'u', 'l'],
+            };
+        }
+        (Value::Null, ObjectStatus::Scalar { ref value_so_far }, 'l')
+            if *value_so_far == vec!['n', 'u', 'l'] =>
+        {
+            *current_status = ObjectStatus::Closed;
         }
         (Value::String(_str), ObjectStatus::StringQuoteOpen, '"') => {
             *current_status = ObjectStatus::StringQuoteClose;
@@ -165,8 +251,8 @@ fn add_char_into_object(
 
         // ------ white spaces ------
         (_, _, ' ' | '\n') => {}
-        _ => {
-            return Err(format!("Invalid character {}", current_char));
+        (val, st, c) => {
+            return Err(format!("Invalid character {} status: {:?}", c, st));
         }
     }
 
@@ -212,358 +298,119 @@ impl JsonStreamParser {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    mod string {
-        mod valid_json_tests {
-            use crate::{parse_stream, JsonStreamParser};
-            use serde_json::json;
+macro_rules! param_test {
+    ($($name:ident: $string:expr, $value:expr)*) => {
+    $(
+        mod $name {
+            use super::{parse_stream, JsonStreamParser};
+            use serde_json::{Value, json};
 
             #[test]
-            fn test_single_quote() {
-                let raw_json = r#"""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!(""));
+            fn simple() {
+                let string: &str = $string;
+                let value: Value = $value;
+                let result = parse_stream(&string);
+                assert_eq!(result.unwrap(), value);
                 let mut parser = JsonStreamParser::new();
-                for c in raw_json.chars() {
+                for c in string.chars() {
                     parser.add_char(c);
                 }
-                assert_eq!(parser.get_result(), &json!(""));
+                assert_eq!(parser.get_result(), &value);
             }
 
             #[test]
-            fn test_single_character_without_close_quote() {
-                let raw_json = r#""a"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!("a"));
+            fn object_single_key_value() {
+                let string = $string;
+                let value = $value;
+                let raw_json = format!("{{\"key\": {}}}", string);
+                let expected = json!({"key": value});
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
                     parser.add_char(c);
                 }
-                assert_eq!(parser.get_result(), &json!("a"));
+                assert_eq!(parser.get_result(), &expected);
             }
 
             #[test]
-            fn test_single_character_with_close_quote() {
-                let raw_json = r#""a""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!("a"));
+            fn object_multiple_key_value() {
+                let string = $string;
+                let value = $value;
+                let raw_json = format!("{{\"key1\": {}, \"key2\": {}}}", string, string);
+                let expected = json!({"key1": value, "key2": value});
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
                     parser.add_char(c);
                 }
-                assert_eq!(parser.get_result(), &json!("a"));
+                assert_eq!(parser.get_result(), &expected);
+            }
+
+            #[test]
+            fn object_multiple_key_value_with_blank_1() {
+                let string = $string;
+                let value = $value;
+                let raw_json = format!("{{ \"key1\": {}, \"key2\": {}}}", string, string);
+                let expected = json!({"key1": value, "key2": value});
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), &expected);
+            }
+
+            #[test]
+            fn object_multiple_key_value_with_blank_2() {
+                let string = $string;
+                let value = $value;
+                let raw_json = format!("{{\"key1\": {}, \"key2\": {} }}", string, string);
+                let expected = json!({"key1": value, "key2": value});
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), &expected);
+            }
+
+            #[test]
+            fn object_multiple_key_value_with_blank_3() {
+                let string = $string;
+                let value = $value;
+                let raw_json = format!("{{ 
+                    \"key1\": {} , 
+                     \"key2\": {} 
+                }}", string, string);
+                let expected = json!({"key1": value, "key2": value});
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
+                }
+                assert_eq!(parser.get_result(), &expected);
             }
         }
+    )*
     }
-    mod object_one_property {
-        mod valid_json_tests {
-            use crate::{parse_stream, JsonStreamParser};
-            use serde_json::json;
+}
 
-            #[test]
-            fn test_single_key_value_pair() {
-                let raw_json = r#"{"key": "value"}"#;
-                let result = parse_stream(raw_json); // Call the parse_stream function correctly
-                assert_eq!(result.unwrap(), json!({"key": "value"})); // Dereference the &Value to compare with Value
-                let mut parser = JsonStreamParser::new();
-                for c in raw_json.chars() {
-                    parser.add_char(c);
-                }
-                assert_eq!(parser.get_result(), &json!({"key": "value"}));
-            }
-
-            #[test]
-            fn test_single_key_value_pair_with_number() {
-                let raw_json = r#"{"age": 1234567890}"#;
-                let result = parse_stream(raw_json); // Call the parse_stream function correctly
-                assert_eq!(result.unwrap(), json!({"age": 1234567890}));
-                let mut parser = JsonStreamParser::new();
-                for c in raw_json.chars() {
-                    parser.add_char(c);
-                }
-                assert_eq!(parser.get_result(), &json!({"age": 1234567890}));
-            }
-
-            #[test]
-            fn test_single_key_value_pair_with_negative_number() {
-                let raw_json = r#"{"age": -1234567890}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": -1234567890}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_number_starting_with_zero() {
-                let raw_json = r#"{"age": 01234567890}"#;
-                let result = parse_stream(raw_json);
-                // This is invalid JSON, so we should return an error.
-                assert_eq!(result.is_err(), true);
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_float_starting_zero() {
-                let raw_json = r#"{"age": 0.456}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 0.456}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_float_starting_zero_and_zero_in_middle() {
-                let raw_json = r#"{"age": 0.004056}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 0.004056}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_negative_float_starting_zero() {
-                let raw_json = r#"{"age": -0.456}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": -0.456}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_float_starting_zero_and_no_decimal() {
-                let raw_json = r#"{"age": 0.}"#;
-                let result = parse_stream(raw_json);
-                // This is invalid JSON, so we should return an error.
-                assert_eq!(result.is_err(), true);
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_float_starting_not_zero() {
-                let raw_json = r#"{"age": 1.456}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 1.456}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_negative_float_starting_not_zero() {
-                let raw_json = r#"{"age": -1.456}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": -1.456}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_zero() {
-                let raw_json = r#"{"age": 0}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 0}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_false() {
-                let raw_json = r#"{"age": false}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": false}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_true() {
-                let raw_json = r#"{"age": true}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": true}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_null() {
-                let raw_json = r#"{"age": null}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": null}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_empty_string() {
-                let raw_json = r#"{"age": ""}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": ""}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_1() {
-                let raw_json = r#"{"age": "  "}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": "  "}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_2() {
-                let raw_json = r#"{"age": "  a  "}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": "  a  "}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_3() {
-                let raw_json = r#"{"age": "a  "}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": "a  "}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_4() {
-                let raw_json = r#"{"age": "  a"}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": "  a"}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_5() {
-                let raw_json = r#"{"a ge": 23}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"a ge": 23}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_6() {
-                let raw_json = r#"{"age ": 23}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age ": 23}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_7() {
-                let raw_json = r#"{" age": 23}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({" age": 23}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_spaces_8() {
-                let raw_json = r#"{ "age":  23  , " height ": 180 }"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 23, " height ": 180}));
-            }
-
-            #[test]
-            fn test_invalid_single_key_value_pair_with_string_with_line_breaks_1() {
-                let raw_json = r#"{
-                    "age": 23,
-                    "name": "John"
-                }"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 23, "name": "John"}));
-            }
-        }
-
-        mod partial_json_tests {
-            use crate::parse_stream;
-            use serde_json::json;
-
-            #[test]
-            fn test_without_closing_brace_for_value() {
-                let raw_json = r#"{"key": "value""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key": "value"})));
-            }
-
-            #[test]
-            fn test_without_closing_quote_for_value() {
-                let raw_json = r#"{"key": "value"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key": "value"})));
-            }
-
-            #[test]
-            fn test_with_opening_quote_without_text_for_value() {
-                let raw_json = r#"{"key": ""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key": ""})));
-            }
-
-            #[test]
-            fn test_without_value() {
-                let raw_json = r#"{"key": "#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key": null})));
-            }
-
-            #[test]
-            fn test_without_colon() {
-                let raw_json = r#"{"key""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key": null})));
-            }
-
-            #[test]
-            fn test_without_closing_quote_for_key() {
-                let raw_json = r#"{"ke"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({})));
-            }
-
-            #[test]
-            fn test_with_just_opening_quote_for_key() {
-                let raw_json = r#"{""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({})));
-            }
-
-            #[test]
-            fn test_with_just_opening_brace() {
-                let raw_json = r#"{"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({})));
-            }
-        }
-    }
-
-    mod object_two_properties {
-        mod valid_json_tests {
-            use crate::parse_stream;
-            use serde_json::json;
-
-            #[test]
-            fn test_two_key_value_pairs() {
-                let raw_json = r#"{"key1": "value1", "key2": "value2"}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"key1": "value1", "key2": "value2"}));
-            }
-
-            #[test]
-            fn test_two_key_value_pairs_with_number() {
-                let raw_json = r#"{"age": 1234567890, "height": 180}"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), json!({"age": 1234567890, "height": 180}));
-            }
-        }
-
-        mod partial_json_tests {
-            use crate::parse_stream;
-            use serde_json::json;
-
-            #[test]
-            fn test_without_closing_brace_for_value() {
-                let raw_json = r#"{"key1": "value1", "key2": "value2""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(
-                    result.unwrap(),
-                    (json!({"key1": "value1", "key2": "value2"}))
-                );
-            }
-
-            #[test]
-            fn test_without_closing_quote_for_value() {
-                let raw_json = r#"{"key1": "value1", "key2": "value2"#;
-                let result = parse_stream(raw_json);
-                assert_eq!(
-                    result.unwrap(),
-                    (json!({"key1": "value1", "key2": "value2"}))
-                );
-            }
-
-            #[test]
-            fn test_with_opening_quote_without_text_for_value() {
-                let raw_json = r#"{"key1": "value1", "key2": ""#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key1": "value1", "key2": ""})));
-            }
-
-            #[test]
-            fn test_without_value() {
-                let raw_json = r#"{"key1": "value1", "key2": "#;
-                let result = parse_stream(raw_json);
-                assert_eq!(result.unwrap(), (json!({"key1": "value1", "key2": null})));
-            }
-        }
-    }
+param_test! {
+    null: r#"null"#, Value::Null
+    true_value: r#"true"#, Value::Bool(true)
+    false_value: r#"false"#, Value::Bool(false)
+    empty_string: r#""""#, Value::String("".to_string())
+    single_character_string: r#""a""#, Value::String("a".to_string())
+    string_with_spaces: r#""a b c""#, Value::String("a b c".to_string())
+    string_with_space_at_end: r#""a b c ""#, Value::String("a b c ".to_string())
+    string_with_space_at_start: r#"" a b c""#, Value::String(" a b c".to_string())
+    string_with_space_at_start_and_end: r#"" a b c ""#, Value::String(" a b c ".to_string())
+    number: r#"1234567890"#, Value::Number(1234567890.into())
+    negative_number: r#"-1234567890"#, Value::Number((-1234567890).into())
+    zero: r#"0"#, Value::Number(0.into())
 }
