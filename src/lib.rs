@@ -12,6 +12,9 @@ enum ObjectStatus {
     Scalar {
         value_so_far: Vec<char>,
     },
+    ScalarNumber {
+        value_so_far: Vec<char>,
+    },
     // We just started a property, likely because we just received an opening brace or a comma in case of an existing object.
     StartProperty,
     // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
@@ -63,7 +66,7 @@ fn add_char_into_object(
             *val = json!({});
             *sts = ObjectStatus::StartProperty;
         }
-        // // ------ true ------
+        // ------ true ------
         (val @ Value::Null, sts @ ObjectStatus::Ready, 't') => {
             *val = json!(true);
             *sts = ObjectStatus::Scalar {
@@ -156,6 +159,57 @@ fn add_char_into_object(
         (Value::Null, sts @ ObjectStatus::Scalar { .. }, 'l') => {
             *sts = ObjectStatus::Closed;
         }
+        // ------ number ------
+        (val @ Value::Null, sts @ ObjectStatus::Ready, c @ '0'..='9') => {
+            *val = Value::Number(c.to_digit(10).unwrap().into());
+            *sts = ObjectStatus::ScalarNumber {
+                value_so_far: vec![c],
+            };
+        }
+        (val @ Value::Null, sts @ ObjectStatus::Ready, '-') => {
+            *val = Value::Number(0.into());
+            *sts = ObjectStatus::ScalarNumber {
+                value_so_far: vec!['-'],
+            };
+        }
+        (
+            Value::Number(ref mut num),
+            ObjectStatus::ScalarNumber {
+                ref mut value_so_far,
+            },
+            c @ '0'..='9',
+        ) => {
+            value_so_far.push(c);
+            // if there are any . in the value so far, then we need to parse the number as a float
+            if value_so_far.contains(&'.') {
+                let parsed_number = value_so_far
+                    .iter()
+                    .collect::<String>()
+                    .parse::<f64>()
+                    .unwrap();
+
+                if let Some(json_number) = serde_json::Number::from_f64(parsed_number) {
+                    *num = json_number;
+                }
+            } else {
+                let parsed_number = value_so_far
+                    .iter()
+                    .collect::<String>()
+                    .parse::<i64>()
+                    .unwrap();
+                *num = parsed_number.into();
+            }
+        }
+        (
+            Value::Number(_),
+            ObjectStatus::ScalarNumber {
+                ref mut value_so_far,
+            },
+            '.',
+        ) => {
+            value_so_far.push('.');
+        }
+        // ------ string ------
         (Value::String(_str), sts @ ObjectStatus::StringQuoteOpen, '"') => {
             *sts = ObjectStatus::StringQuoteClose;
         }
@@ -182,7 +236,7 @@ fn add_char_into_object(
                 *sts = ObjectStatus::Colon { key: key.clone() };
             }
         }
-        (Value::Object(_obj), sts @ ObjectStatus::Colon { .. }, ' ' | '\n') => {}
+        (Value::Object(_obj), ObjectStatus::Colon { .. }, ' ' | '\n') => {}
         (Value::Object(ref mut obj), sts @ ObjectStatus::Colon { .. }, '"') => {
             if let ObjectStatus::Colon { key } = sts.clone() {
                 *sts = ObjectStatus::ValueQuoteOpen { key: key.clone() };
@@ -263,8 +317,7 @@ fn add_char_into_object(
         (Value::Object(_obj), sts @ ObjectStatus::ValueQuoteClose, '}') => {
             *sts = ObjectStatus::Closed;
         }
-
-        // // ------ white spaces ------
+        // ------ white spaces ------
         (_, _, ' ' | '\n') => {}
         (_val, st, c) => {
             return Err(format!("Invalid character {} status: {:?}", c, st));
@@ -428,4 +481,6 @@ param_test! {
     number: r#"1234567890"#, Value::Number(1234567890.into())
     negative_number: r#"-1234567890"#, Value::Number((-1234567890).into())
     zero: r#"0"#, Value::Number(0.into())
+    float: r#"123.456"#, Value::Number(serde_json::Number::from_f64(123.456).unwrap())
+    negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
 }
