@@ -327,6 +327,7 @@ fn add_char_into_object(
     Ok(())
 }
 
+#[cfg(debug_assertions)]
 pub fn parse_stream(json_string: &str) -> Result<Value, String> {
     let mut out: Value = Value::Null;
     let mut current_status = ObjectStatus::Ready;
@@ -337,6 +338,18 @@ pub fn parse_stream(json_string: &str) -> Result<Value, String> {
             current_status.clone(),
             current_char.to_string()
         );
+        if let Err(e) = add_char_into_object(&mut out, &mut current_status, current_char) {
+            return Err(e);
+        }
+    }
+    return Ok(out);
+}
+
+#[cfg(not(debug_assertions))]
+pub fn parse_stream(json_string: &str) -> Result<Value, String> {
+    let mut out: Value = Value::Null;
+    let mut current_status = ObjectStatus::Ready;
+    for current_char in json_string.chars() {
         if let Err(e) = add_char_into_object(&mut out, &mut current_status, current_char) {
             return Err(e);
         }
