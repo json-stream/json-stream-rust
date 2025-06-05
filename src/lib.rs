@@ -236,7 +236,7 @@ fn add_char_into_object(
                 *sts = ObjectStatus::Colon { key: key.clone() };
             }
         }
-        (Value::Object(_obj), ObjectStatus::Colon { .. }, ' ' | '\n') => {}
+        (Value::Object(_obj), ObjectStatus::Colon { .. }, ' ' | '\n' | '\t' | '\r') => {}
         (Value::Object(ref mut obj), sts @ ObjectStatus::Colon { .. }, '"') => {
             if let ObjectStatus::Colon { key } = sts.clone() {
                 *sts = ObjectStatus::ValueQuoteOpen { key: key.clone() };
@@ -298,6 +298,7 @@ fn add_char_into_object(
                 *sts = ObjectStatus::Closed;
             }
         }
+        (Value::Object(_obj), ObjectStatus::ValueScalar { .. }, ' ' | '\n' | '\t' | '\r') => {}
         (
             Value::Object(_obj),
             ObjectStatus::ValueScalar {
@@ -318,7 +319,7 @@ fn add_char_into_object(
             *sts = ObjectStatus::Closed;
         }
         // ------ white spaces ------
-        (_, _, ' ' | '\n') => {}
+        (_, _, ' ' | '\n' | '\t' | '\r') => {}
         (_val, st, c) => {
             return Err(format!("Invalid character {} status: {:?}", c, st));
         }
@@ -501,4 +502,6 @@ param_test! {
     zero: r#"0"#, Value::Number(0.into())
     float: r#"123.456"#, Value::Number(serde_json::Number::from_f64(123.456).unwrap())
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
+    tab_whitespace_number: "\t123\t", Value::Number(123.into())
+    carriage_return_whitespace_number: "\r123\r", Value::Number(123.into())
 }
