@@ -220,6 +220,9 @@ fn add_char_into_object(
         (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '"') => {
             *sts = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
         }
+        (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '}') => {
+            *sts = ObjectStatus::Closed;
+        }
         (Value::Object(ref mut obj), sts @ ObjectStatus::KeyQuoteOpen { .. }, '"') => {
             if let ObjectStatus::KeyQuoteOpen { key_so_far } = sts.clone() {
                 *sts = ObjectStatus::KeyQuoteClose {
@@ -501,4 +504,5 @@ param_test! {
     zero: r#"0"#, Value::Number(0.into())
     float: r#"123.456"#, Value::Number(serde_json::Number::from_f64(123.456).unwrap())
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
+    empty_object: r#"{}"#, json!({})
 }
