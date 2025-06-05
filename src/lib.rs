@@ -290,24 +290,27 @@ fn add_char_into_object(
         (Value::Object(ref mut obj), sts @ ObjectStatus::ValueScalar { .. }, '}') => {
             if let ObjectStatus::ValueScalar { key, ref mut value_so_far } = sts {
                 let key_string = key.iter().collect::<String>();
-                let mut value_string = value_so_far.iter().collect::<String>();
+                let value_without = value_so_far.iter().collect::<String>();
+                let mut value_with = value_without.clone();
+                value_with.push('}');
 
-                // first try parsing the current accumulated value; if it succeeds,
-                // the current `}` belongs to the parent object
-                if let Ok(value) = value_string.parse::<Value>() {
-                    obj.insert(key_string, value);
-                    *sts = ObjectStatus::Closed;
-                } else {
-                    // otherwise attempt to parse including the current character
-                    value_string.push('}');
-                    if let Ok(value) = value_string.parse::<Value>() {
+                let new_state = match (value_without.parse::<Value>(), value_with.parse::<Value>()) {
+                    (Ok(value), _) => {
                         obj.insert(key_string, value);
-                        *sts = ObjectStatus::ValueQuoteClose;
-                        *value_so_far = value_string.chars().collect();
-                    } else {
-                        // still part of the scalar value (e.g. nested object)
-                        value_so_far.push('}');
+                        Some(ObjectStatus::Closed)
                     }
+                    (Err(_), Ok(value)) => {
+                        obj.insert(key_string, value);
+                        *value_so_far = value_with.chars().collect();
+                        Some(ObjectStatus::ValueQuoteClose)
+                    }
+                    (Err(_), Err(_)) => {
+                        value_so_far.push('}');
+                        None
+                    }
+                };
+                if let Some(state) = new_state {
+                    *sts = state;
                 }
             }
         }
