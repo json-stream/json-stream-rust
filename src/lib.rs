@@ -5,7 +5,7 @@ enum ObjectStatus {
     // We are ready to start a new object.
     Ready,
     // We are in the beginning of a string, likely because we just received an opening quote.
-    StringQuoteOpen,
+    StringQuoteOpen { raw: String },
     // We just finished a string, likely because we just received a closing quote.
     StringQuoteClose,
     // We are in the middle of a scalar value, likely because we just received a digit.
@@ -20,7 +20,7 @@ enum ObjectStatus {
     // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
     // unlike the value, we cannot add the key to the object until it is complete.
     KeyQuoteOpen {
-        key_so_far: Vec<char>,
+        raw: String,
     },
     // We just finished a key, likely because we just received a closing quote.
     KeyQuoteClose {
@@ -33,7 +33,7 @@ enum ObjectStatus {
     // We are in the beginning of a value, likely because we just received a quote.
     ValueQuoteOpen {
         key: Vec<char>,
-        // We don't need to store the valueSoFar because we can add the value to the object immediately.
+        raw: String,
     },
     ValueQuoteClose,
 
@@ -60,7 +60,7 @@ fn add_char_into_object(
     match (object, current_status, current_char) {
         (val @ Value::Null, sts @ ObjectStatus::Ready, '"') => {
             *val = json!("");
-            *sts = ObjectStatus::StringQuoteOpen;
+            *sts = ObjectStatus::StringQuoteOpen { raw: String::new() };
         }
         (val @ Value::Null, sts @ ObjectStatus::Ready, '{') => {
             *val = json!({});
@@ -210,29 +210,51 @@ fn add_char_into_object(
             value_so_far.push('.');
         }
         // ------ string ------
-        (Value::String(_str), sts @ ObjectStatus::StringQuoteOpen, '"') => {
-            *sts = ObjectStatus::StringQuoteClose;
-        }
-        (Value::String(str), sts @ ObjectStatus::StringQuoteOpen, char) => {
-            str.push(char);
-            *sts = ObjectStatus::StringQuoteOpen;
+        (Value::String(str), ref mut sts @ ObjectStatus::StringQuoteOpen { .. }, c) => {
+            if let ObjectStatus::StringQuoteOpen { ref mut raw } = sts {
+                let mut local_raw = std::mem::take(raw);
+                if c == '"' {
+                    let is_escaped = local_raw.chars().rev().take_while(|ch| *ch == '\\').count() % 2 == 1;
+                    if !is_escaped {
+                        let parsed: String = serde_json::from_str(&format!("\"{}\"", local_raw))
+                            .map_err(|e| e.to_string())?;
+                        *str = parsed;
+                        **sts = ObjectStatus::StringQuoteClose;
+                        return Ok(());
+                    } else {
+                        local_raw.push(c);
+                    }
+                } else {
+                    local_raw.push(c);
+                }
+                **sts = ObjectStatus::StringQuoteOpen { raw: local_raw };
+            }
         }
         (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '"') => {
-            *sts = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
+            *sts = ObjectStatus::KeyQuoteOpen { raw: String::new() };
         }
         (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '}') => {
             *sts = ObjectStatus::Closed;
         }
-        (Value::Object(ref mut obj), sts @ ObjectStatus::KeyQuoteOpen { .. }, '"') => {
-            if let ObjectStatus::KeyQuoteOpen { key_so_far } = sts.clone() {
-                *sts = ObjectStatus::KeyQuoteClose {
-                    key: key_so_far.clone(),
-                };
-                obj.insert(key_so_far.iter().collect::<String>(), Value::Null);
+        (Value::Object(ref mut obj), ref mut sts @ ObjectStatus::KeyQuoteOpen { .. }, c) => {
+            if let ObjectStatus::KeyQuoteOpen { ref mut raw } = sts {
+                let mut local_raw = std::mem::take(raw);
+                if c == '"' {
+                    let is_escaped = local_raw.chars().rev().take_while(|ch| *ch == '\\').count() % 2 == 1;
+                    if !is_escaped {
+                        let parsed: String = serde_json::from_str(&format!("\"{}\"", local_raw))
+                            .map_err(|e| e.to_string())?;
+                        **sts = ObjectStatus::KeyQuoteClose { key: parsed.chars().collect() };
+                        obj.insert(parsed, Value::Null);
+                        return Ok(());
+                    } else {
+                        local_raw.push(c);
+                    }
+                } else {
+                    local_raw.push(c);
+                }
+                **sts = ObjectStatus::KeyQuoteOpen { raw: local_raw };
             }
-        }
-        (Value::Object(_obj), ObjectStatus::KeyQuoteOpen { ref mut key_so_far }, char) => {
-            key_so_far.push(char);
         }
         (Value::Object(_obj), sts @ ObjectStatus::KeyQuoteClose { .. }, ':') => {
             if let ObjectStatus::KeyQuoteClose { key } = sts.clone() {
@@ -242,25 +264,31 @@ fn add_char_into_object(
         (Value::Object(_obj), ObjectStatus::Colon { .. }, ' ' | '\n') => {}
         (Value::Object(ref mut obj), sts @ ObjectStatus::Colon { .. }, '"') => {
             if let ObjectStatus::Colon { key } = sts.clone() {
-                *sts = ObjectStatus::ValueQuoteOpen { key: key.clone() };
+                *sts = ObjectStatus::ValueQuoteOpen { key: key.clone(), raw: String::new() };
                 // create an empty string for the value
                 obj.insert(key.iter().collect::<String>().clone(), json!(""));
             }
         }
         // ------ Add String Value ------
-        (Value::Object(_obj), sts @ ObjectStatus::ValueQuoteOpen { .. }, '"') => {
-            *sts = ObjectStatus::ValueQuoteClose;
-        }
-        (Value::Object(ref mut obj), ObjectStatus::ValueQuoteOpen { key }, char) => {
-            let key_string = key.iter().collect::<String>();
-            let value = obj.get_mut(&key_string).unwrap();
-            match value {
-                Value::String(value) => {
-                    value.push(char);
+        (Value::Object(ref mut obj), ref mut sts @ ObjectStatus::ValueQuoteOpen { .. }, c) => {
+            if let ObjectStatus::ValueQuoteOpen { ref key, ref mut raw } = &mut **sts {
+                let key_clone = key.clone();
+                let mut local_raw = std::mem::take(raw);
+                if c == '"' {
+                    let is_escaped = local_raw.chars().rev().take_while(|ch| *ch == '\\').count() % 2 == 1;
+                    if !is_escaped {
+                        let parsed: String = serde_json::from_str(&format!("\"{}\"", local_raw))
+                            .map_err(|e| e.to_string())?;
+                        obj.insert(key.iter().collect::<String>(), Value::String(parsed));
+                        **sts = ObjectStatus::ValueQuoteClose;
+                        return Ok(());
+                    } else {
+                        local_raw.push(c);
+                    }
+                } else {
+                    local_raw.push(c);
                 }
-                _ => {
-                    return Err(format!("Invalid value type for key {}", key_string));
-                }
+                **sts = ObjectStatus::ValueQuoteOpen { key: key_clone, raw: local_raw };
             }
         }
 
@@ -517,5 +545,6 @@ param_test! {
     zero: r#"0"#, Value::Number(0.into())
     float: r#"123.456"#, Value::Number(serde_json::Number::from_f64(123.456).unwrap())
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
+    string_with_escaped_quote: r#""a\"b""#, Value::String("a\"b".to_string())
     empty_object: r#"{}"#, json!({})
 }
