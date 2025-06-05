@@ -288,17 +288,27 @@ fn add_char_into_object(
             }
         }
         (Value::Object(ref mut obj), sts @ ObjectStatus::ValueScalar { .. }, '}') => {
-            if let ObjectStatus::ValueScalar { key, value_so_far } = sts.clone() {
+            if let ObjectStatus::ValueScalar { key, ref mut value_so_far } = sts {
                 let key_string = key.iter().collect::<String>();
-                let value_string = value_so_far.iter().collect::<String>();
-                let value = match value_string.parse::<Value>() {
-                    Ok(value) => value,
-                    Err(e) => {
-                        return Err(format!("Invalid value for key {}: {}", key_string, e));
+                let mut value_string = value_so_far.iter().collect::<String>();
+
+                // first try parsing the current accumulated value; if it succeeds,
+                // the current `}` belongs to the parent object
+                if let Ok(value) = value_string.parse::<Value>() {
+                    obj.insert(key_string, value);
+                    *sts = ObjectStatus::Closed;
+                } else {
+                    // otherwise attempt to parse including the current character
+                    value_string.push('}');
+                    if let Ok(value) = value_string.parse::<Value>() {
+                        obj.insert(key_string, value);
+                        *sts = ObjectStatus::ValueQuoteClose;
+                        *value_so_far = value_string.chars().collect();
+                    } else {
+                        // still part of the scalar value (e.g. nested object)
+                        value_so_far.push('}');
                     }
-                };
-                obj.insert(key_string, value);
-                *sts = ObjectStatus::Closed;
+                }
             }
         }
         (
