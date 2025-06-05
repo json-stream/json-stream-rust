@@ -472,6 +472,14 @@ impl JsonStreamParser {
     }
 }
 
+// The `param_test!` macro defines a suite of parameterized tests. Each entry
+// provides a JSON snippet (`$string`) and the `serde_json::Value` (`$value`)
+// expected after parsing. The macro expands into a module per entry containing
+// multiple tests:
+//   * parsing the snippet on its own
+//   * the snippet as a value in objects
+//   * the snippet embedded inside arrays
+// This approach ensures consistent coverage across many JSON value types.
 macro_rules! param_test {
     ($($name:ident: $string:expr, $value:expr)*) => {
     $(
@@ -574,85 +582,75 @@ macro_rules! param_test {
             fn array_single_value() {
                 let string = $string;
                 let value = $value;
-                if !string.starts_with('[') {
-                    let raw_json = format!("[{}]", string);
-                    let expected = json!([value]);
-                    let result = parse_stream(&raw_json);
-                    assert_eq!(result.unwrap(), expected);
-                    let mut parser = JsonStreamParser::new();
-                    for c in raw_json.chars() {
-                        parser.add_char(c);
-                    }
-                    assert_eq!(parser.get_result(), &expected);
+                let raw_json = format!("[{}]", string);
+                let expected = json!([value]);
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
                 }
+                assert_eq!(parser.get_result(), &expected);
             }
 
             #[test]
             fn array_multiple_values() {
                 let string = $string;
                 let value = $value;
-                if !string.starts_with('[') {
-                    let raw_json = format!("[{}, {}]", string, string);
-                    let expected = json!([value.clone(), value]);
-                    let result = parse_stream(&raw_json);
-                    assert_eq!(result.unwrap(), expected);
-                    let mut parser = JsonStreamParser::new();
-                    for c in raw_json.chars() {
-                        parser.add_char(c);
-                    }
-                    assert_eq!(parser.get_result(), &expected);
+                let raw_json = format!("[{}, {}]", string, string);
+                let expected = json!([value.clone(), value]);
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
                 }
+                assert_eq!(parser.get_result(), &expected);
             }
 
             #[test]
             fn array_multiple_values_with_blank_1() {
                 let string = $string;
                 let value = $value;
-                if !string.starts_with('[') {
-                    let raw_json = format!("[ {}, {}]", string, string);
-                    let expected = json!([value.clone(), value]);
-                    let result = parse_stream(&raw_json);
-                    assert_eq!(result.unwrap(), expected);
-                    let mut parser = JsonStreamParser::new();
-                    for c in raw_json.chars() {
-                        parser.add_char(c);
-                    }
-                    assert_eq!(parser.get_result(), &expected);
+                let raw_json = format!("[ {}, {}]", string, string);
+                let expected = json!([value.clone(), value]);
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
                 }
+                assert_eq!(parser.get_result(), &expected);
             }
 
             #[test]
             fn array_multiple_values_with_blank_2() {
                 let string = $string;
                 let value = $value;
-                if !string.starts_with('[') {
-                    let raw_json = format!("[{}, {} ]", string, string);
-                    let expected = json!([value.clone(), value]);
-                    let result = parse_stream(&raw_json);
-                    assert_eq!(result.unwrap(), expected);
-                    let mut parser = JsonStreamParser::new();
-                    for c in raw_json.chars() {
-                        parser.add_char(c);
-                    }
-                    assert_eq!(parser.get_result(), &expected);
+                let raw_json = format!("[{}, {} ]", string, string);
+                let expected = json!([value.clone(), value]);
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
                 }
+                assert_eq!(parser.get_result(), &expected);
             }
 
             #[test]
             fn array_multiple_values_with_blank_3() {
                 let string = $string;
                 let value = $value;
-                if !string.starts_with('[') {
-                    let raw_json = format!("[\n    {},\n    {}\n]", string, string);
-                    let expected = json!([value.clone(), value]);
-                    let result = parse_stream(&raw_json);
-                    assert_eq!(result.unwrap(), expected);
-                    let mut parser = JsonStreamParser::new();
-                    for c in raw_json.chars() {
-                        parser.add_char(c);
-                    }
-                    assert_eq!(parser.get_result(), &expected);
+                let raw_json = format!("[\n    {},\n    {}\n]", string, string);
+                let expected = json!([value.clone(), value]);
+                let result = parse_stream(&raw_json);
+                assert_eq!(result.unwrap(), expected);
+                let mut parser = JsonStreamParser::new();
+                for c in raw_json.chars() {
+                    parser.add_char(c);
                 }
+                assert_eq!(parser.get_result(), &expected);
             }
         }
     )*
@@ -679,5 +677,36 @@ param_test! {
     zero: r#"0"#, Value::Number(0.into())
     float: r#"123.456"#, Value::Number(serde_json::Number::from_f64(123.456).unwrap())
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
-    empty_array: r#"[]"#, json!([])
+}
+
+#[cfg(test)]
+mod array_tests {
+    use super::{parse_stream, JsonStreamParser};
+    use serde_json::json;
+
+    #[test]
+    fn empty_array() {
+        let raw_json = "[]";
+        let expected = json!([]);
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn array_as_object_value() {
+        let raw_json = "{\"items\": []}";
+        let expected = json!({"items": []});
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
 }

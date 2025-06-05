@@ -58,6 +58,10 @@ Object {"key": String("valu")}
 Object {"key": String("value")}
 ```
 
+The library supports the standard JSON primitives and arrays. Tests are
+generated using a small macro that exercises each snippet on its own, within
+objects and inside arrays to ensure consistent behaviour.
+
 ## Testing
 
 This project uses `cargo test` to run the tests.
