@@ -26,9 +26,11 @@ enum ObjectStatus {
     // We just started an array, after receiving an opening bracket.
     StartArray,
     // We are in the beginning of an array string value.
-    ArrayValueQuoteOpen { index: usize },
+    ArrayValueQuoteOpen {
+        index: usize,
+    },
     // We just closed an array string value.
-    ArrayValueQuoteClose { index: usize },
+    ArrayValueQuoteClose,
     // We are taking an array scalar value (numbers, booleans, etc.).
     ArrayValueScalar {
         index: usize,
@@ -239,13 +241,15 @@ fn process_char(
             value_so_far.push('.');
         }
         // ------ array ------
-        (val @ Value::Array(_), sts @ ObjectStatus::StartArray, ']') => {
+        (Value::Array(_), sts @ ObjectStatus::StartArray, ']') => {
             *sts = ObjectStatus::Closed;
         }
         (Value::Array(_), ObjectStatus::StartArray, ' ' | '\n') => {}
         (Value::Array(ref mut arr), sts @ ObjectStatus::StartArray, '"') => {
             arr.push(json!(""));
-            *sts = ObjectStatus::ArrayValueQuoteOpen { index: arr.len() - 1 };
+            *sts = ObjectStatus::ArrayValueQuoteOpen {
+                index: arr.len() - 1,
+            };
         }
         (Value::Array(ref mut arr), sts @ ObjectStatus::StartArray, char) => {
             arr.push(Value::Null);
@@ -266,32 +270,28 @@ fn process_char(
                 }
                 *s = decode_json_string(s)?;
             }
-            *sts = ObjectStatus::ArrayValueQuoteClose { index };
+            *sts = ObjectStatus::ArrayValueQuoteClose;
         }
-        (
-            Value::Array(ref mut arr),
-            ObjectStatus::ArrayValueQuoteOpen { index },
-            char,
-        ) => {
+        (Value::Array(ref mut arr), ObjectStatus::ArrayValueQuoteOpen { index }, char) => {
             if let Some(Value::String(s)) = arr.get_mut(*index) {
                 s.push(char);
             } else {
                 return Err("Invalid string value in array".to_string());
             }
         }
-        (Value::Array(_), ObjectStatus::ArrayValueQuoteClose { .. }, ' ' | '\n') => {}
-        (Value::Array(_), sts @ ObjectStatus::ArrayValueQuoteClose { .. }, ',') => {
+        (Value::Array(_), ObjectStatus::ArrayValueQuoteClose, ' ' | '\n') => {}
+        (Value::Array(_), sts @ ObjectStatus::ArrayValueQuoteClose, ',') => {
             *sts = ObjectStatus::StartArray;
         }
-        (Value::Array(_), sts @ ObjectStatus::ArrayValueQuoteClose { .. }, ']') => {
+        (Value::Array(_), sts @ ObjectStatus::ArrayValueQuoteClose, ']') => {
             *sts = ObjectStatus::Closed;
         }
-        (
-            Value::Array(ref mut arr),
-            sts @ ObjectStatus::ArrayValueScalar { .. },
-            ','
-        ) => {
-            if let ObjectStatus::ArrayValueScalar { index, ref mut value_so_far } = sts {
+        (Value::Array(ref mut arr), sts @ ObjectStatus::ArrayValueScalar { .. }, ',') => {
+            if let ObjectStatus::ArrayValueScalar {
+                index,
+                ref mut value_so_far,
+            } = sts
+            {
                 let value_string = value_so_far.iter().collect::<String>();
                 let idx = *index;
                 let value: Value = match value_string.parse::<Value>() {
@@ -302,12 +302,12 @@ fn process_char(
             }
             *sts = ObjectStatus::StartArray;
         }
-        (
-            Value::Array(ref mut arr),
-            sts @ ObjectStatus::ArrayValueScalar { .. },
-            ']'
-        ) => {
-            if let ObjectStatus::ArrayValueScalar { index, ref mut value_so_far } = sts {
+        (Value::Array(ref mut arr), sts @ ObjectStatus::ArrayValueScalar { .. }, ']') => {
+            if let ObjectStatus::ArrayValueScalar {
+                index,
+                ref mut value_so_far,
+            } = sts
+            {
                 let value_string = value_so_far.iter().collect::<String>();
                 let idx = *index;
                 let value: Value = match value_string.parse::<Value>() {
@@ -320,7 +320,10 @@ fn process_char(
         }
         (
             Value::Array(_),
-            ObjectStatus::ArrayValueScalar { ref mut value_so_far, .. },
+            ObjectStatus::ArrayValueScalar {
+                ref mut value_so_far,
+                ..
+            },
             char,
         ) => {
             value_so_far.push(char);
@@ -464,7 +467,10 @@ fn process_char(
     Ok(())
 }
 
-fn add_char_into_object(stack: &mut Vec<(Value, ObjectStatus)>, current_char: char) -> Result<(), String> {
+fn add_char_into_object(
+    stack: &mut Vec<(Value, ObjectStatus)>,
+    current_char: char,
+) -> Result<(), String> {
     if stack.is_empty() {
         return Err("empty stack".to_string());
     }
@@ -485,13 +491,17 @@ fn add_char_into_object(stack: &mut Vec<(Value, ObjectStatus)>, current_char: ch
             }
             (Value::Object(_), ObjectStatus::Colon { key }, '{') => {
                 let key_clone = key.clone();
-                *status = ObjectStatus::ValueNested { key: key_clone.clone() };
+                *status = ObjectStatus::ValueNested {
+                    key: key_clone.clone(),
+                };
                 stack.push((Value::Null, ObjectStatus::Ready));
                 return add_char_into_object(stack, '{');
             }
             (Value::Object(_), ObjectStatus::Colon { key }, '[') => {
                 let key_clone = key.clone();
-                *status = ObjectStatus::ValueNested { key: key_clone.clone() };
+                *status = ObjectStatus::ValueNested {
+                    key: key_clone.clone(),
+                };
                 stack.push((Value::Null, ObjectStatus::Ready));
                 return add_char_into_object(stack, '[');
             }
@@ -506,10 +516,7 @@ fn add_char_into_object(stack: &mut Vec<(Value, ObjectStatus)>, current_char: ch
 
     // handle closed contexts
     while stack.len() > 1 {
-        let should_pop = match stack.last() {
-            Some((_, ObjectStatus::Closed)) => true,
-            _ => false,
-        };
+        let should_pop = matches!(stack.last(), Some((_, ObjectStatus::Closed)));
         if !should_pop {
             break;
         }
@@ -519,7 +526,7 @@ fn add_char_into_object(stack: &mut Vec<(Value, ObjectStatus)>, current_char: ch
             ObjectStatus::ArrayValueNested => {
                 if let Value::Array(arr) = parent_value {
                     arr.push(completed_value);
-                    *parent_status = ObjectStatus::ArrayValueQuoteClose { index: arr.len() - 1 };
+                    *parent_status = ObjectStatus::ArrayValueQuoteClose;
                 } else {
                     return Err("Parent is not array".to_string());
                 }
@@ -552,9 +559,7 @@ pub fn parse_stream(json_string: &str) -> Result<Value, String> {
             st.clone(),
             current_char.to_string()
         );
-        if let Err(e) = add_char_into_object(&mut stack, current_char) {
-            return Err(e);
-        }
+        add_char_into_object(&mut stack, current_char)?;
     }
     Ok(stack.pop().unwrap().0)
 }
@@ -563,15 +568,19 @@ pub fn parse_stream(json_string: &str) -> Result<Value, String> {
 pub fn parse_stream(json_string: &str) -> Result<Value, String> {
     let mut stack: Vec<(Value, ObjectStatus)> = vec![(Value::Null, ObjectStatus::Ready)];
     for current_char in json_string.chars() {
-        if let Err(e) = add_char_into_object(&mut stack, current_char) {
-            return Err(e);
-        }
+        add_char_into_object(&mut stack, current_char)?;
     }
     Ok(stack.pop().unwrap().0)
 }
 
 pub struct JsonStreamParser {
     stack: Vec<(Value, ObjectStatus)>,
+}
+
+impl Default for JsonStreamParser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JsonStreamParser {
@@ -601,6 +610,7 @@ impl JsonStreamParser {
 macro_rules! param_test {
     ($($name:ident: $string:expr, $value:expr)*) => {
     $(
+        #[cfg(test)]
         mod $name {
             use super::{parse_stream, JsonStreamParser};
             use serde_json::{Value, json};
@@ -613,7 +623,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), value);
                 let mut parser = JsonStreamParser::new();
                 for c in string.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &value);
             }
@@ -628,7 +638,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -643,7 +653,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -658,7 +668,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -673,7 +683,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -691,7 +701,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -706,7 +716,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -721,7 +731,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -736,7 +746,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -751,7 +761,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -766,7 +776,7 @@ macro_rules! param_test {
                 assert_eq!(result.unwrap(), expected);
                 let mut parser = JsonStreamParser::new();
                 for c in raw_json.chars() {
-                    parser.add_char(c);
+                    parser.add_char(c).unwrap();
                 }
                 assert_eq!(parser.get_result(), &expected);
             }
@@ -852,7 +862,7 @@ mod array_tests {
     #[test]
     fn array_with_nested_array() {
         let raw_json = "[[1,2],[3]]";
-        let expected = json!([[1,2],[3]]);
+        let expected = json!([[1, 2], [3]]);
         let result = parse_stream(raw_json);
         assert_eq!(result.unwrap(), expected);
         let mut parser = JsonStreamParser::new();
