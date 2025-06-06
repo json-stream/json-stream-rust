@@ -209,8 +209,8 @@ fn process_char(
             c @ '0'..='9',
         ) => {
             value_so_far.push(c);
-            // if there are any . in the value so far, then we need to parse the number as a float
-            if value_so_far.contains(&'.') {
+            // if the number contains a decimal point or an exponent, parse as f64
+            if value_so_far.contains(&'.') || value_so_far.contains(&'e') || value_so_far.contains(&'E') {
                 let parsed_number = value_so_far
                     .iter()
                     .collect::<String>()
@@ -228,6 +228,24 @@ fn process_char(
                     .unwrap();
                 *num = parsed_number.into();
             }
+        }
+        (
+            Value::Number(_),
+            ObjectStatus::ScalarNumber {
+                ref mut value_so_far,
+            },
+            'e' | 'E',
+        ) => {
+            value_so_far.push(current_char);
+        }
+        (
+            Value::Number(_),
+            ObjectStatus::ScalarNumber {
+                ref mut value_so_far,
+            },
+            '+' | '-',
+        ) if matches!(value_so_far.last(), Some('e') | Some('E')) => {
+            value_so_far.push(current_char);
         }
         (
             Value::Number(_),
@@ -796,6 +814,10 @@ param_test! {
     zero: r#"0"#, Value::Number(0.into())
     float: r#"123.456"#, Value::Number(serde_json::Number::from_f64(123.456).unwrap())
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
+    exponent_positive: r#"1e2"#, Value::Number(serde_json::Number::from_f64(100.0).unwrap())
+    exponent_negative: r#"1e-2"#, Value::Number(serde_json::Number::from_f64(0.01).unwrap())
+    exponent_positive_decimal: r#"1.5e2"#, Value::Number(serde_json::Number::from_f64(150.0).unwrap())
+    exponent_negative_decimal: r#"1.5e-2"#, Value::Number(serde_json::Number::from_f64(0.015).unwrap())
     tab_whitespace_number: "\t123\t", Value::Number(123.into())
     carriage_return_whitespace_number: "\r123\r", Value::Number(123.into())
     nested_array_value: "[[1]]", json!([[1]])
