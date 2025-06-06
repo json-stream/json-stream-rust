@@ -760,6 +760,10 @@ param_test! {
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
     tab_whitespace_number: "\t123\t", Value::Number(123.into())
     carriage_return_whitespace_number: "\r123\r", Value::Number(123.into())
+    nested_array_value: "[[1]]", json!([[1]])
+    deep_nested_array_value: "[[[1]]]", json!([[[1]]])
+    nested_object_value: r#"{"a":{"b":1}}"#, json!({"a": {"b": 1 }})
+    deep_nested_object_value: r#"{"a":{"b":{"c":1}}}"#, json!({"a": {"b": {"c": 1 }}})
 }
 
 #[cfg(test)]
@@ -849,6 +853,19 @@ mod array_tests {
     fn object_with_deep_nesting() {
         let raw_json = "{\"data\": [{\"vals\": [1]}]}";
         let expected = json!({"data": [{"vals": [1]}]});
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn object_with_extra_deep_nesting() {
+        let raw_json = "{\"data\": [{\"vals\": [{\"deep\": [1]}]}]}";
+        let expected = json!({"data": [{"vals": [{"deep": [1]}]}]});
         let result = parse_stream(raw_json);
         assert_eq!(result.unwrap(), expected);
         let mut parser = JsonStreamParser::new();
