@@ -1,5 +1,13 @@
 use serde_json::{json, Value};
 
+fn ends_with_odd_backslashes(s: &str) -> bool {
+    s.chars().rev().take_while(|&c| c == '\\').count() % 2 == 1
+}
+
+fn decode_json_string(raw: &str) -> Result<String, String> {
+    serde_json::from_str::<String>(&format!("\"{}\"", raw)).map_err(|e| e.to_string())
+}
+
 #[derive(Clone, Debug)]
 enum ObjectStatus {
     // We are ready to start a new object.
@@ -246,10 +254,19 @@ fn process_char(
                 value_so_far: vec![char],
             };
         }
-        (Value::Array(_), sts @ ObjectStatus::ArrayValueQuoteOpen { index: _ }, '"') => {
-            if let ObjectStatus::ArrayValueQuoteOpen { index } = sts.clone() {
-                *sts = ObjectStatus::ArrayValueQuoteClose { index };
+        (Value::Array(ref mut arr), sts @ ObjectStatus::ArrayValueQuoteOpen { .. }, '"') => {
+            let index = match *sts {
+                ObjectStatus::ArrayValueQuoteOpen { index } => index,
+                _ => unreachable!(),
+            };
+            if let Some(Value::String(s)) = arr.get_mut(index) {
+                if ends_with_odd_backslashes(s) {
+                    s.push('"');
+                    return Ok(());
+                }
+                *s = decode_json_string(s)?;
             }
+            *sts = ObjectStatus::ArrayValueQuoteClose { index };
         }
         (
             Value::Array(ref mut arr),
@@ -309,8 +326,13 @@ fn process_char(
             value_so_far.push(char);
         }
         // ------ string ------
-        (Value::String(_str), sts @ ObjectStatus::StringQuoteOpen, '"') => {
-            *sts = ObjectStatus::StringQuoteClose;
+        (Value::String(ref mut s), sts @ ObjectStatus::StringQuoteOpen, '"') => {
+            if ends_with_odd_backslashes(s) {
+                s.push('"');
+            } else {
+                *s = decode_json_string(s)?;
+                *sts = ObjectStatus::StringQuoteClose;
+            }
         }
         (Value::String(str), sts @ ObjectStatus::StringQuoteOpen, char) => {
             str.push(char);
@@ -318,6 +340,9 @@ fn process_char(
         }
         (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '"') => {
             *sts = ObjectStatus::KeyQuoteOpen { key_so_far: vec![] };
+        }
+        (Value::Object(_obj), sts @ ObjectStatus::StartProperty, '}') => {
+            *sts = ObjectStatus::Closed;
         }
         (Value::Object(ref mut obj), sts @ ObjectStatus::KeyQuoteOpen { .. }, '"') => {
             if let ObjectStatus::KeyQuoteOpen { key_so_far } = sts.clone() {
@@ -344,7 +369,19 @@ fn process_char(
             }
         }
         // ------ Add String Value ------
-        (Value::Object(_obj), sts @ ObjectStatus::ValueQuoteOpen { .. }, '"') => {
+        (Value::Object(ref mut obj), sts @ ObjectStatus::ValueQuoteOpen { .. }, '"') => {
+            let key_vec = match sts {
+                ObjectStatus::ValueQuoteOpen { key } => key.clone(),
+                _ => unreachable!(),
+            };
+            let key_string = key_vec.iter().collect::<String>();
+            if let Some(Value::String(value)) = obj.get_mut(&key_string) {
+                if ends_with_odd_backslashes(value) {
+                    value.push('"');
+                    return Ok(());
+                }
+                *value = decode_json_string(value)?;
+            }
             *sts = ObjectStatus::ValueQuoteClose;
         }
         (Value::Object(ref mut obj), ObjectStatus::ValueQuoteOpen { key }, char) => {
@@ -744,6 +781,7 @@ param_test! {
     false_value: r#"false"#, Value::Bool(false)
     empty_string: r#""""#, Value::String("".to_string())
     single_character_string: r#""a""#, Value::String("a".to_string())
+    string_with_escaped_quote: r#""a\"b""#, Value::String("a\"b".to_string())
     string_with_spaces: r#""a b c""#, Value::String("a b c".to_string())
     string_with_space_at_end: r#""a b c ""#, Value::String("a b c ".to_string())
     string_with_space_at_start: r#"" a b c""#, Value::String(" a b c".to_string())
@@ -762,6 +800,7 @@ param_test! {
     carriage_return_whitespace_number: "\r123\r", Value::Number(123.into())
     nested_array_value: "[[1]]", json!([[1]])
     deep_nested_array_value: "[[[1]]]", json!([[[1]]])
+    empty_object: r#"{}"#, json!({})
     nested_object_value: r#"{"a":{"b":1}}"#, json!({"a": {"b": 1 }})
     deep_nested_object_value: r#"{"a":{"b":{"c":1}}}"#, json!({"a": {"b": {"c": 1 }}})
 }
