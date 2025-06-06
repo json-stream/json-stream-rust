@@ -26,6 +26,8 @@ enum ObjectStatus {
         index: usize,
         value_so_far: Vec<char>,
     },
+    // A nested object/array being parsed inside an array
+    ArrayValueNested,
     // We just started a property, likely because we just received an opening brace or a comma in case of an existing object.
     StartProperty,
     // We are in the beginning of a key, likely because we just received a quote. We need to store the key_so_far because
@@ -55,6 +57,10 @@ enum ObjectStatus {
         key: Vec<char>,
         value_so_far: Vec<char>,
     },
+    // A nested object/array being parsed as a property value
+    ValueNested {
+        key: Vec<char>,
+    },
 
     // We just finished the object, likely because we just received a closing brace.
     Closed,
@@ -63,7 +69,7 @@ enum ObjectStatus {
 // this function takes and existing object that we are building along with a single character as we as an address
 // to the current position in the object that we are in and returns the object with that character added along with
 // the new address.
-fn add_char_into_object(
+fn process_char(
     object: &mut Value,
     current_status: &mut ObjectStatus,
     current_char: char,
@@ -421,55 +427,129 @@ fn add_char_into_object(
     Ok(())
 }
 
+fn add_char_into_object(stack: &mut Vec<(Value, ObjectStatus)>, current_char: char) -> Result<(), String> {
+    if stack.is_empty() {
+        return Err("empty stack".to_string());
+    }
+
+    // check if we need to start a nested context
+    {
+        let (value, status) = stack.last_mut().unwrap();
+        match (value, status.clone(), current_char) {
+            (Value::Array(_), ObjectStatus::StartArray, '{') => {
+                *status = ObjectStatus::ArrayValueNested;
+                stack.push((Value::Null, ObjectStatus::Ready));
+                return add_char_into_object(stack, '{');
+            }
+            (Value::Array(_), ObjectStatus::StartArray, '[') => {
+                *status = ObjectStatus::ArrayValueNested;
+                stack.push((Value::Null, ObjectStatus::Ready));
+                return add_char_into_object(stack, '[');
+            }
+            (Value::Object(_), ObjectStatus::Colon { key }, '{') => {
+                let key_clone = key.clone();
+                *status = ObjectStatus::ValueNested { key: key_clone.clone() };
+                stack.push((Value::Null, ObjectStatus::Ready));
+                return add_char_into_object(stack, '{');
+            }
+            (Value::Object(_), ObjectStatus::Colon { key }, '[') => {
+                let key_clone = key.clone();
+                *status = ObjectStatus::ValueNested { key: key_clone.clone() };
+                stack.push((Value::Null, ObjectStatus::Ready));
+                return add_char_into_object(stack, '[');
+            }
+            _ => {}
+        }
+    }
+
+    {
+        let (ref mut val, ref mut status) = stack.last_mut().unwrap();
+        process_char(val, status, current_char)?;
+    }
+
+    // handle closed contexts
+    while stack.len() > 1 {
+        let should_pop = match stack.last() {
+            Some((_, ObjectStatus::Closed)) => true,
+            _ => false,
+        };
+        if !should_pop {
+            break;
+        }
+        let (completed_value, _) = stack.pop().unwrap();
+        let (parent_value, parent_status) = stack.last_mut().unwrap();
+        match parent_status {
+            ObjectStatus::ArrayValueNested => {
+                if let Value::Array(arr) = parent_value {
+                    arr.push(completed_value);
+                    *parent_status = ObjectStatus::ArrayValueQuoteClose { index: arr.len() - 1 };
+                } else {
+                    return Err("Parent is not array".to_string());
+                }
+            }
+            ObjectStatus::ValueNested { key } => {
+                if let Value::Object(map) = parent_value {
+                    map.insert(key.iter().collect::<String>(), completed_value);
+                    *parent_status = ObjectStatus::ValueQuoteClose;
+                } else {
+                    return Err("Parent is not object".to_string());
+                }
+            }
+            _ => {
+                return Err("Invalid parent status".to_string());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(debug_assertions)]
 pub fn parse_stream(json_string: &str) -> Result<Value, String> {
-    let mut out: Value = Value::Null;
-    let mut current_status = ObjectStatus::Ready;
+    let mut stack: Vec<(Value, ObjectStatus)> = vec![(Value::Null, ObjectStatus::Ready)];
     for current_char in json_string.chars() {
+        let (ref val, ref st) = stack.last().unwrap();
         println!(
             "variables: {:?} {:?} {:?}",
-            out,
-            current_status.clone(),
+            val,
+            st.clone(),
             current_char.to_string()
         );
-        if let Err(e) = add_char_into_object(&mut out, &mut current_status, current_char) {
+        if let Err(e) = add_char_into_object(&mut stack, current_char) {
             return Err(e);
         }
     }
-    return Ok(out);
+    Ok(stack.pop().unwrap().0)
 }
 
 #[cfg(not(debug_assertions))]
 pub fn parse_stream(json_string: &str) -> Result<Value, String> {
-    let mut out: Value = Value::Null;
-    let mut current_status = ObjectStatus::Ready;
+    let mut stack: Vec<(Value, ObjectStatus)> = vec![(Value::Null, ObjectStatus::Ready)];
     for current_char in json_string.chars() {
-        if let Err(e) = add_char_into_object(&mut out, &mut current_status, current_char) {
+        if let Err(e) = add_char_into_object(&mut stack, current_char) {
             return Err(e);
         }
     }
-    return Ok(out);
+    Ok(stack.pop().unwrap().0)
 }
 
 pub struct JsonStreamParser {
-    object: Value,
-    current_status: ObjectStatus,
+    stack: Vec<(Value, ObjectStatus)>,
 }
 
 impl JsonStreamParser {
     pub fn new() -> JsonStreamParser {
         JsonStreamParser {
-            object: Value::Null,
-            current_status: ObjectStatus::Ready,
+            stack: vec![(Value::Null, ObjectStatus::Ready)],
         }
     }
 
     pub fn add_char(&mut self, current_char: char) -> Result<(), String> {
-        add_char_into_object(&mut self.object, &mut self.current_status, current_char)
+        add_char_into_object(&mut self.stack, current_char)
     }
 
     pub fn get_result(&self) -> &Value {
-        &self.object
+        &self.stack[0].0
     }
 }
 
@@ -680,6 +760,10 @@ param_test! {
     negative_float: r#"-123.456"#, Value::Number(serde_json::Number::from_f64(-123.456).unwrap())
     tab_whitespace_number: "\t123\t", Value::Number(123.into())
     carriage_return_whitespace_number: "\r123\r", Value::Number(123.into())
+    nested_array_value: "[[1]]", json!([[1]])
+    deep_nested_array_value: "[[[1]]]", json!([[[1]]])
+    nested_object_value: r#"{"a":{"b":1}}"#, json!({"a": {"b": 1 }})
+    deep_nested_object_value: r#"{"a":{"b":{"c":1}}}"#, json!({"a": {"b": {"c": 1 }}})
 }
 
 #[cfg(test)]
@@ -704,6 +788,84 @@ mod array_tests {
     fn array_as_object_value() {
         let raw_json = "{\"items\": []}";
         let expected = json!({"items": []});
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn array_with_nested_object() {
+        let raw_json = "[{\"a\":1}]";
+        let expected = json!([{"a":1}]);
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn array_with_nested_array() {
+        let raw_json = "[[1,2],[3]]";
+        let expected = json!([[1,2],[3]]);
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn object_with_nested_object() {
+        let raw_json = "{\"obj\":{\"b\":1}}";
+        let expected = json!({"obj": {"b":1}});
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn object_with_nested_array() {
+        let raw_json = "{\"arr\": [1, 2, 3]}";
+        let expected = json!({"arr": [1, 2, 3]});
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn object_with_deep_nesting() {
+        let raw_json = "{\"data\": [{\"vals\": [1]}]}";
+        let expected = json!({"data": [{"vals": [1]}]});
+        let result = parse_stream(raw_json);
+        assert_eq!(result.unwrap(), expected);
+        let mut parser = JsonStreamParser::new();
+        for c in raw_json.chars() {
+            parser.add_char(c).unwrap();
+        }
+        assert_eq!(parser.get_result(), &expected);
+    }
+
+    #[test]
+    fn object_with_extra_deep_nesting() {
+        let raw_json = "{\"data\": [{\"vals\": [{\"deep\": [1]}]}]}";
+        let expected = json!({"data": [{"vals": [{"deep": [1]}]}]});
         let result = parse_stream(raw_json);
         assert_eq!(result.unwrap(), expected);
         let mut parser = JsonStreamParser::new();
