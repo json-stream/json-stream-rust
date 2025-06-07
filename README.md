@@ -64,7 +64,17 @@ objects and inside arrays to ensure consistent behaviour.
 
 ## Testing
 
-This project uses `cargo test` to run the tests.
+This project uses `cargo test` to run the tests. In addition to the regular unit
+tests there is a property-based test suite powered by `proptest`. These tests
+generate random JSON values with printable alphanumeric strings and integers,
+then verify that parsing the JSON string with `parse_stream` yields the same
+result as incrementally feeding characters through `JsonStreamParser`.
+
+Run the property tests on their own with:
+
+```bash
+cargo test --test property_tests -- --test-threads=1
+```
 
 ## Contributing
 

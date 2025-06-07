@@ -17,6 +17,13 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
 
+  property-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Run property based tests
+      run: cargo test --test property_tests --verbose
+
   clippy:
     runs-on: ubuntu-latest
     steps:
@@ -53,7 +60,7 @@ jobs:
         run: echo "The version of the Rust library is ${{ steps.get_version.outputs.LIB_LOCAL_VERSION }}"
   
   cargo-push:
-    needs: [test, clippy]
+    needs: [test, property-tests, clippy]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
