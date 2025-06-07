@@ -914,3 +914,101 @@ mod array_tests {
         assert_eq!(parser.get_result(), &expected);
     }
 }
+
+#[cfg(test)]
+mod additional_tests {
+    use super::{parse_stream, JsonStreamParser};
+    use serde_json::{json, Value};
+
+    fn parse_via_stream_parser(raw: &str) -> Result<Value, String> {
+        let mut parser = JsonStreamParser::new();
+        for c in raw.chars() {
+            parser.add_char(c)?;
+        }
+        Ok(parser.get_result().clone())
+    }
+
+    mod deep_nesting {
+        use super::*;
+
+        #[test]
+        fn very_deep_array() {
+            let raw_json = "[[[[[[1]]]]]]";
+            let expected = json!([[[[[[1]]]]]]);
+            let direct = parse_stream(raw_json).unwrap();
+            let streaming = parse_via_stream_parser(raw_json).unwrap();
+            assert_eq!(direct, expected);
+            assert_eq!(streaming, expected);
+        }
+
+        #[test]
+        fn very_deep_object() {
+            let raw_json = "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":1}}}}}}";
+            let expected = json!({"a": {"b": {"c": {"d": {"e": {"f": 1}}}}}});
+            let direct = parse_stream(raw_json).unwrap();
+            let streaming = parse_via_stream_parser(raw_json).unwrap();
+            assert_eq!(direct, expected);
+            assert_eq!(streaming, expected);
+        }
+    }
+
+    mod escaped_strings {
+        use super::*;
+
+        #[test]
+        fn newline_and_tab() {
+            let raw_json = r#""line\n\tend""#;
+            let expected = json!("line\n\tend");
+            let direct = parse_stream(raw_json).unwrap();
+            let streaming = parse_via_stream_parser(raw_json).unwrap();
+            assert_eq!(direct, expected);
+            assert_eq!(streaming, expected);
+        }
+
+        #[test]
+        fn escaped_backslash() {
+            let raw_json = r#""path\\to\\file""#;
+            let expected = json!("path\\to\\file");
+            let direct = parse_stream(raw_json).unwrap();
+            let streaming = parse_via_stream_parser(raw_json).unwrap();
+            assert_eq!(direct, expected);
+            assert_eq!(streaming, expected);
+        }
+    }
+
+    mod exponent_numbers {
+        use super::*;
+
+        #[test]
+        fn positive_exponent() {
+            let raw_json = "1e2";
+            assert!(parse_stream(raw_json).is_err());
+            assert!(parse_via_stream_parser(raw_json).is_err());
+        }
+
+        #[test]
+        fn negative_exponent() {
+            let raw_json = "-1e-2";
+            assert!(parse_stream(raw_json).is_err());
+            assert!(parse_via_stream_parser(raw_json).is_err());
+        }
+    }
+
+    mod malformed_input {
+        use super::*;
+
+        #[test]
+        fn extra_closing_bracket() {
+            let raw_json = "]";
+            assert!(parse_stream(raw_json).is_err());
+            assert!(parse_via_stream_parser(raw_json).is_err());
+        }
+
+        #[test]
+        fn missing_comma() {
+            let raw_json = "[1 2]";
+            assert!(parse_stream(raw_json).is_err());
+            assert!(parse_via_stream_parser(raw_json).is_err());
+        }
+    }
+}
