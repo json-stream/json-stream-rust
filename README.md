@@ -1,85 +1,72 @@
 ![crates.io](https://img.shields.io/crates/v/json-stream-parser.svg)
 
-# JSON Stream Parser in Rust
+# JSON Stream Parser
 
-This project is a library that provides an incremental JSON parser, built with Rust. It's designed to parse a stream of JSON data, making it suited for situations where you might not have the entire JSON object available when parsing begins — for example, in the case of streaming a structured response from a Large Language Model.
+Parse JSON as it streams in, character by character. Perfect for real-time applications like LLM responses, WebSocket streams, or large file processing.
 
-🚨 This project is a work in progress, and is not yet ready for use in production.
+## Why Use This?
 
-## Installation
+- **Real-time parsing**: Get results before the stream completes
+- **Memory efficient**: No need to buffer entire JSON strings
+- **Handles incomplete data**: Gracefully parses partial JSON
+- **Zero-copy when possible**: Built for performance
 
-This project is built with [Rust](https://www.rust-lang.org/), and you'll need `cargo` to get started.
+## Quick Start
 
-## Usage
+Add to your `Cargo.toml`:
+```toml
+[dependencies]
+json-stream-parser = "0.1.4"
+```
 
-The simplest way to use this library is to use the `parse_stream` function, which takes a string slice and returns a `Result` containing a `serde_json::Value` if successful.
-Here's an example:
+### Simple Usage
 
 ```rust
-fn main() {
-    let incomplete_json = r#"{"key": "value""#;
-    let parsed_json = json_stream_parser::parse_stream(incomplete_json);
-    if let Ok(json) = parsed_json {
-        println!("{:?}", json);
-    }
+use json_stream_parser::parse_stream;
+
+let incomplete = r#"{"name": "John", "age": 3"#;
+let result = parse_stream(incomplete).unwrap();
+println!("{:?}", result); // Object {"name": String("John"), "age": Number(3)}
+```
+
+### Streaming Usage
+
+```rust
+use json_stream_parser::JsonStreamParser;
+
+let mut parser = JsonStreamParser::new();
+let stream = r#"{"items": [1, 2, 3]}"#;
+
+for char in stream.chars() {
+    parser.add_char(char);
+    // Get partial results as parsing progresses
+    let current_result = parser.get_result();
 }
 ```
 
-As you can see this object is incomplete, but the parser will still be able to parse it:
+## Use Cases
 
-```rust
-Object {"key": String("value")}
-```
+- **LLM streaming responses**: Parse JSON as AI models generate it
+- **WebSocket data**: Handle real-time JSON streams
+- **Large file processing**: Parse without loading entire files into memory
+- **Network protocols**: Handle JSON over TCP/UDP streams
+- **Log processing**: Parse JSON logs in real-time
 
-Alternatively, you can use the `JsonStreamParser` struct to parse a stream of JSON data incrementally. Here's an example:
+## Performance
 
-```rust
-fn main() {
-    let incomplete_json = r#"{"key": "value""#;
-    let mut parser = JsonStreamParser::new();
-    for c in incomplete_json.chars() {
-        parser.add_char(c);
-        println!("{:?}", parser.get_result());
-    }
-    println!("{:?}", parser.get_result());
-}
-```
-
-As the characters are streamed in, the parser will update the result as follows:
-
-```rust
-Object {} // stays empty until the closing quote for key is found
-Object {"key": Null}
-Object {"key": String("")}
-Object {"key": String("v")}
-Object {"key": String("va")}
-Object {"key": String("val")}
-Object {"key": String("valu")}
-Object {"key": String("value")}
-```
-
-The library supports the standard JSON primitives and arrays. Tests are
-generated using a small macro that exercises each snippet on its own, within
-objects and inside arrays to ensure consistent behaviour.
+Designed for streaming scenarios where traditional parsers fall short:
+- Parses incomplete JSON strings
+- Updates results incrementally
+- Minimal memory overhead
+- No blocking on incomplete data
 
 ## Testing
 
-This project uses `cargo test` to run the tests. In addition to the regular unit
-tests there is a property-based test suite powered by `proptest`. These tests
-generate random JSON values with printable alphanumeric strings and integers,
-then verify that parsing the JSON string with `parse_stream` yields the same
-result as incrementally feeding characters through `JsonStreamParser`.
-
-Run the property tests on their own with:
-
 ```bash
-cargo test --test property_tests -- --test-threads=1
+cargo test                           # Run all tests
+cargo test --test property_tests     # Run property-based tests
 ```
-
-## Contributing
-
-Communicate intentions through the Issues for any major changes. Feel free contribute other changes directly via a pull request.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT
