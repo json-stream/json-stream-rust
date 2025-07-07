@@ -1,10 +1,10 @@
 name: Rust
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    push:
+      branches: ["main"]
+    pull_request:
+      branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,29 +13,29 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: cargo test --verbose
 
   property-tests:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Run property based tests
-      run: cargo test --test property_tests --verbose
+      - uses: actions/checkout@v3
+      - name: Run property based tests
+        run: cargo test --test property_tests --verbose
 
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-    - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
-        components: clippy
-    - name: Run clippy
-      run: cargo clippy -- -D warnings
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: clippy
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
 
   performance-tests:
     runs-on: ubuntu-latest
@@ -62,10 +62,10 @@ jobs:
           VERSION=$(awk -F '"' '/^version =/ {print $2}' Cargo.toml)
           echo "Version of the Rust library is $VERSION"
           echo "::set-output name=LIB_LOCAL_VERSION::$VERSION"
-      
+
       - name: Print Version
         run: echo "The version of the Rust library is ${{ steps.get_version.outputs.LIB_LOCAL_VERSION }}"
-  
+
   cargo-push:
     needs: [test, property-tests, clippy]
     runs-on: ubuntu-latest
@@ -81,6 +81,5 @@ jobs:
       - name: Publish crates
         uses: katyo/publish-crates@v2
         with:
-            registry-token: ${{ secrets.CARGO_TOKEN }}
-            ignore-unpublished-changes: true
-
+          registry-token: ${{ secrets.CARGO_TOKEN }}
+          ignore-unpublished-changes: true
