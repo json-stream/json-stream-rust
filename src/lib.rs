@@ -5,7 +5,7 @@ fn ends_with_odd_backslashes(s: &str) -> bool {
 }
 
 fn decode_json_string(raw: &str) -> Result<String, String> {
-    serde_json::from_str::<String>(&format!("\"{}\"", raw)).map_err(|e| e.to_string())
+    serde_json::from_str::<String>(&format!("\"{raw}\"")).map_err(|e| e.to_string())
 }
 
 #[derive(Clone, Debug)]
@@ -314,7 +314,7 @@ fn process_char(
                 let idx = *index;
                 let value: Value = match value_string.parse::<Value>() {
                     Ok(v) => v,
-                    Err(e) => return Err(format!("Invalid array value: {}", e)),
+                    Err(e) => return Err(format!("Invalid array value: {e}")),
                 };
                 arr[idx] = value;
             }
@@ -330,7 +330,7 @@ fn process_char(
                 let idx = *index;
                 let value: Value = match value_string.parse::<Value>() {
                     Ok(v) => v,
-                    Err(e) => return Err(format!("Invalid array value: {}", e)),
+                    Err(e) => return Err(format!("Invalid array value: {e}")),
                 };
                 arr[idx] = value;
             }
@@ -413,7 +413,7 @@ fn process_char(
                     value.push(char);
                 }
                 _ => {
-                    return Err(format!("Invalid value type for key {}", key_string));
+                    return Err(format!("Invalid value type for key {key_string}"));
                 }
             }
         }
@@ -434,7 +434,7 @@ fn process_char(
                 let value = match value_string.parse::<Value>() {
                     Ok(value) => value,
                     Err(e) => {
-                        return Err(format!("Invalid value for key {}: {}", key_string, e));
+                        return Err(format!("Invalid value for key {key_string}: {e}"));
                     }
                 };
                 obj.insert(key_string, value);
@@ -448,7 +448,7 @@ fn process_char(
                 let value = match value_string.parse::<Value>() {
                     Ok(value) => value,
                     Err(e) => {
-                        return Err(format!("Invalid value for key {}: {}", key_string, e));
+                        return Err(format!("Invalid value for key {key_string}: {e}"));
                     }
                 };
                 obj.insert(key_string, value);
@@ -478,7 +478,7 @@ fn process_char(
         // ------ white spaces ------
         (_, _, ' ' | '\n' | '\t' | '\r') => {}
         (_val, st, c) => {
-            return Err(format!("Invalid character {} status: {:?}", c, st));
+            return Err(format!("Invalid character {c} status: {st:?}"));
         }
     }
 
