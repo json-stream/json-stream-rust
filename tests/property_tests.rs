@@ -1,7 +1,7 @@
+use json_stream_parser::{parse_stream, JsonStreamParser};
 use proptest::prelude::*;
 use proptest::string::string_regex;
-use json_stream_parser::{parse_stream, JsonStreamParser};
-use serde_json::{Value, Map};
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 fn json_number() -> impl Strategy<Value = serde_json::Number> {
@@ -13,7 +13,9 @@ fn json_value() -> impl Strategy<Value = Value> {
         Just(Value::Null),
         any::<bool>().prop_map(Value::Bool),
         json_number().prop_map(Value::Number),
-        string_regex("[a-zA-Z0-9]{0,20}").unwrap().prop_map(Value::String),
+        string_regex("[a-zA-Z0-9]{0,20}")
+            .unwrap()
+            .prop_map(Value::String),
     ];
     leaf.prop_recursive(3, 8, 3, |inner| {
         prop_oneof![

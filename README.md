@@ -13,6 +13,7 @@ This project is built with [Rust](https://www.rust-lang.org/), and you'll need `
 ## Usage
 
 The simplest way to use this library is to use the `parse_stream` function, which takes a string slice and returns a `Result` containing a `serde_json::Value` if successful.
+If you need to guard against malicious input sizes or excessive nesting, use `parse_stream_with_limits` to specify optional limits on input length and nesting depth.
 Here's an example:
 
 ```rust
