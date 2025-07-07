@@ -192,7 +192,8 @@ fn process_char(
         }
         // ------ number ------
         (val @ Value::Null, sts @ ObjectStatus::Ready, c @ '0'..='9') => {
-            *val = Value::Number(c.to_digit(10).unwrap().into());
+            let digit = c.to_digit(10).ok_or_else(|| "invalid digit".to_string())?;
+            *val = Value::Number(digit.into());
             *sts = ObjectStatus::ScalarNumber {
                 value_so_far: vec![c],
             };
@@ -220,7 +221,7 @@ fn process_char(
                     .iter()
                     .collect::<String>()
                     .parse::<f64>()
-                    .unwrap();
+                    .map_err(|e| e.to_string())?;
 
                 if let Some(json_number) = serde_json::Number::from_f64(parsed_number) {
                     *num = json_number;
@@ -230,7 +231,7 @@ fn process_char(
                     .iter()
                     .collect::<String>()
                     .parse::<i64>()
-                    .unwrap();
+                    .map_err(|e| e.to_string())?;
                 *num = parsed_number.into();
             }
         }
@@ -410,7 +411,9 @@ fn process_char(
         }
         (Value::Object(ref mut obj), ObjectStatus::ValueQuoteOpen { key }, char) => {
             let key_string = key.iter().collect::<String>();
-            let value = obj.get_mut(&key_string).unwrap();
+            let value = obj
+                .get_mut(&key_string)
+                .ok_or_else(|| format!("missing key {key_string}"))?;
             match value {
                 Value::String(value) => {
                     value.push(char);
@@ -598,8 +601,23 @@ pub fn parse_stream(json_string: &str) -> Result<Value, String> {
     Ok(stack.pop().unwrap().0)
 }
 
+pub fn parse_stream_with_limits(
+    json_string: &str,
+    max_depth: Option<usize>,
+    max_length: Option<usize>,
+) -> Result<Value, String> {
+    let mut parser = JsonStreamParser::with_limits(max_depth, max_length);
+    for c in json_string.chars() {
+        parser.add_char(c)?;
+    }
+    Ok(parser.stack.pop().unwrap().0)
+}
+
 pub struct JsonStreamParser {
     stack: Vec<(Value, ObjectStatus)>,
+    processed_chars: usize,
+    max_depth: Option<usize>,
+    max_length: Option<usize>,
 }
 
 impl Default for JsonStreamParser {
@@ -610,13 +628,35 @@ impl Default for JsonStreamParser {
 
 impl JsonStreamParser {
     pub fn new() -> JsonStreamParser {
+        Self::with_limits(None, None)
+    }
+
+    pub fn with_limits(max_depth: Option<usize>, max_length: Option<usize>) -> JsonStreamParser {
         JsonStreamParser {
             stack: vec![(Value::Null, ObjectStatus::Ready)],
+            processed_chars: 0,
+            max_depth,
+            max_length,
         }
     }
 
     pub fn add_char(&mut self, current_char: char) -> Result<(), String> {
-        add_char_into_object(&mut self.stack, current_char)
+        if let Some(limit) = self.max_length {
+            self.processed_chars += 1;
+            if self.processed_chars > limit {
+                return Err("input length limit exceeded".to_string());
+            }
+        }
+
+        add_char_into_object(&mut self.stack, current_char)?;
+
+        if let Some(max_depth) = self.max_depth {
+            if self.stack.len() > max_depth {
+                return Err("max depth exceeded".to_string());
+            }
+        }
+
+        Ok(())
     }
 
     pub fn get_result(&self) -> &Value {
