@@ -212,7 +212,10 @@ fn process_char(
         ) => {
             value_so_far.push(c);
             // if the number contains a decimal point or an exponent, parse as f64
-            if value_so_far.contains(&'.') || value_so_far.contains(&'e') || value_so_far.contains(&'E') {
+            if value_so_far.contains(&'.')
+                || value_so_far.contains(&'e')
+                || value_so_far.contains(&'E')
+            {
                 let parsed_number = value_so_far
                     .iter()
                     .collect::<String>()
@@ -493,35 +496,39 @@ fn add_char_into_object(
         return Err("empty stack".to_string());
     }
 
-    // check if we need to start a nested context
+    // check if we need to start a nested context without cloning status
     {
         let (value, status) = stack.last_mut().unwrap();
-        match (value, status.clone(), current_char) {
-            (Value::Array(_), ObjectStatus::StartArray, '{') => {
+        match (value, current_char) {
+            (Value::Array(_), '{') if matches!(status, ObjectStatus::StartArray) => {
                 *status = ObjectStatus::ArrayValueNested;
                 stack.push((Value::Null, ObjectStatus::Ready));
                 return add_char_into_object(stack, '{');
             }
-            (Value::Array(_), ObjectStatus::StartArray, '[') => {
+            (Value::Array(_), '[') if matches!(status, ObjectStatus::StartArray) => {
                 *status = ObjectStatus::ArrayValueNested;
                 stack.push((Value::Null, ObjectStatus::Ready));
                 return add_char_into_object(stack, '[');
             }
-            (Value::Object(_), ObjectStatus::Colon { key }, '{') => {
-                let key_clone = key.clone();
-                *status = ObjectStatus::ValueNested {
-                    key: key_clone.clone(),
-                };
-                stack.push((Value::Null, ObjectStatus::Ready));
-                return add_char_into_object(stack, '{');
+            (Value::Object(_), '{') => {
+                if let ObjectStatus::Colon { key } = status {
+                    let key_clone = key.clone();
+                    *status = ObjectStatus::ValueNested {
+                        key: key_clone.clone(),
+                    };
+                    stack.push((Value::Null, ObjectStatus::Ready));
+                    return add_char_into_object(stack, '{');
+                }
             }
-            (Value::Object(_), ObjectStatus::Colon { key }, '[') => {
-                let key_clone = key.clone();
-                *status = ObjectStatus::ValueNested {
-                    key: key_clone.clone(),
-                };
-                stack.push((Value::Null, ObjectStatus::Ready));
-                return add_char_into_object(stack, '[');
+            (Value::Object(_), '[') => {
+                if let ObjectStatus::Colon { key } = status {
+                    let key_clone = key.clone();
+                    *status = ObjectStatus::ValueNested {
+                        key: key_clone.clone(),
+                    };
+                    stack.push((Value::Null, ObjectStatus::Ready));
+                    return add_char_into_object(stack, '[');
+                }
             }
             _ => {}
         }
